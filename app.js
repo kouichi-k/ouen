@@ -497,12 +497,45 @@ async function makeSealImage(file) {
   }
   if (maxX < 0) throw new Error('印が見つかりませんでした。白い紙に押した印を明るい場所で撮ってください');
   g.putImageData(px, 0, 0);
+
+  // 傾きを自動で直す：印の枠や文字の線が縦横にそろう角度（±10°）を探す
+  const pts = [];
+  const step = Math.max(1, Math.round(Math.sqrt(((maxX - minX + 1) * (maxY - minY + 1)) / 60000)));
+  for (let y = minY; y <= maxY; y += step) for (let x = minX; x <= maxX; x += step) if (a[(y * w + x) * 4 + 3] >= 128) pts.push(x, y);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  const scoreAt = (deg) => {
+    const r = deg * Math.PI / 180, co = Math.cos(r), si = Math.sin(r);
+    const off = Math.ceil(Math.hypot(w, h)), hx = new Uint32Array(off * 2), hy = new Uint32Array(off * 2);
+    for (let i = 0; i < pts.length; i += 2) {
+      const dx = pts[i] - cx, dy = pts[i + 1] - cy;
+      hx[(Math.round((dx * co + dy * si) / step) + off) | 0]++; hy[(Math.round((-dx * si + dy * co) / step) + off) | 0]++;
+    }
+    let sc = 0; for (let i = 0; i < hx.length; i++) sc += hx[i] * hx[i] + hy[i] * hy[i];
+    return sc;
+  };
+  let best = 0, bestScore = scoreAt(0);
+  for (let d = -10; d <= 10; d += 0.5) { const sc = scoreAt(d); if (sc > bestScore) { bestScore = sc; best = d; } }
+  for (let d = best - 0.5; d <= best + 0.5; d += 0.1) { const sc = scoreAt(d); if (sc > bestScore) { bestScore = sc; best = d; } }
+  let src = cv;
+  if (Math.abs(best) >= 0.2) {
+    src = document.createElement('canvas'); src.width = w; src.height = h;
+    const sg = src.getContext('2d');
+    sg.translate(cx, cy); sg.rotate(-best * Math.PI / 180); sg.translate(-cx, -cy); sg.drawImage(cv, 0, 0);
+    // 回したあとの範囲を求め直す
+    const rd = sg.getImageData(0, 0, w, h).data;
+    const rc = new Uint32Array(h), cc = new Uint32Array(w);
+    for (let i = 0; i < n; i++) if (rd[i * 4 + 3] > 90) { rc[(i / w) | 0]++; cc[i % w]++; }
+    minX = cc.findIndex((v) => v >= minHit); maxX = w - 1 - Array.from(cc).reverse().findIndex((v) => v >= minHit);
+    minY = rc.findIndex((v) => v >= minHit); maxY = h - 1 - Array.from(rc).reverse().findIndex((v) => v >= minHit);
+  }
+  makeSealImage.lastAngle = best;
+
   // 余白を詰めて正方形に配置（スプレッドシートに保存できる大きさまで縮める）
   const bw = maxX - minX + 1, bh = maxY - minY + 1, side = Math.max(bw, bh);
   for (const size of [300, 240, 190, 150]) {
     const out = document.createElement('canvas'); out.width = out.height = size;
     const k = (size * 0.96) / side;
-    out.getContext('2d').drawImage(cv, minX, minY, bw, bh, (size - bw * k) / 2, (size - bh * k) / 2, bw * k, bh * k);
+    out.getContext('2d').drawImage(src, minX, minY, bw, bh, (size - bw * k) / 2, (size - bh * k) / 2, bw * k, bh * k);
     const og = out.getContext('2d'); const od = og.getImageData(0, 0, size, size);
     for (let i = 3; i < od.data.length; i += 4) { const v = od.data[i]; od.data[i] = v < 40 ? 0 : Math.min(255, Math.round(v / 64) * 64); }
     og.putImageData(od, 0, 0);
