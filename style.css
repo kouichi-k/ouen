@@ -1,0 +1,75 @@
+:root {
+  --bg: #f4f5f7; --card: #fff; --text: #1f2328; --muted: #6a737d;
+  --line: #d0d7de; --accent: #1f6feb; --accent-text: #fff; --danger: #cf222e;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; background: var(--bg); color: var(--text); font-size: 16px; }
+header { background: #24292f; color: #fff; padding: 10px 16px; position: sticky; top: 0; z-index: 5; }
+header h1 { margin: 0 0 8px; font-size: 18px; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; }
+nav button { background: transparent; color: #fff; border: 1px solid #57606a; padding: 6px 12px; border-radius: 6px; font-size: 15px; }
+nav button.active { background: #fff; color: #24292f; }
+main { max-width: 960px; margin: 0 auto; padding: 16px; }
+.tab { display: none; }
+.tab.active { display: block; }
+h2 { font-size: 18px; margin: 20px 0 10px; }
+h3 { font-size: 16px; margin: 20px 0 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 14px; background: var(--card); padding: 14px; border-radius: 8px; border: 1px solid var(--line); }
+.grid .wide { grid-column: 1 / -1; }
+label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); gap: 4px; }
+input, select, textarea { font: inherit; font-size: 16px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--text); width: 100%; }
+button, .filebtn { font: inherit; font-size: 15px; padding: 9px 16px; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: var(--text); cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.danger { color: var(--danger); }
+button.small { padding: 4px 10px; font-size: 13px; }
+.filebtn { display: inline-flex; color: var(--text); font-size: 15px; }
+.filebtn input { display: none; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
+.hidden { display: none !important; }
+.calc { font-size: 16px; margin: 10px 0 0; }
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
+.filters label { min-width: 160px; }
+.hint { color: var(--muted); font-size: 13px; }
+.summary { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; background: var(--card); font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #eaeef2; white-space: nowrap; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 10px; background: #dafbe1; color: #116329; white-space: nowrap; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
+.card .row { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.card .sub { color: var(--muted); font-size: 13px; }
+#toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #24292f; color: #fff; padding: 10px 18px; border-radius: 20px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+#toast.show { opacity: 1; }
+
+/* 請求書 */
+.invoice { background: #fff; color: #000; border: 1px solid var(--line); margin-top: 16px; padding: 28px 32px; font-size: 13px; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; }
+.invoice h1 { text-align: center; letter-spacing: .6em; font-size: 26px; margin: 0 0 18px; border-bottom: 3px double #000; padding-bottom: 6px; }
+.inv-head { display: flex; justify-content: space-between; gap: 20px; }
+.inv-to .name { font-size: 18px; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 8px; }
+.inv-from { text-align: right; line-height: 1.6; }
+.inv-from .name { font-size: 16px; font-weight: bold; }
+.inv-meta { text-align: right; margin-bottom: 8px; }
+.inv-total { display: inline-flex; border: 2px solid #000; margin: 14px 0; }
+.inv-total span { padding: 8px 14px; }
+.inv-total span:first-child { background: #eee; border-right: 1px solid #000; }
+.inv-total strong { font-size: 20px; }
+.invoice table { font-size: 12px; background: #fff; }
+.invoice th, .invoice td { border: 1px solid #000; padding: 4px 6px; }
+.invoice th { background: #eee; text-align: center; }
+.inv-sum { margin-left: auto; width: 300px; margin-top: 8px; }
+.inv-sum td:first-child { background: #eee; }
+.inv-bottom { margin-top: 14px; white-space: pre-wrap; }
+.empty { color: var(--muted); padding: 20px; text-align: center; }
+
+@media print {
+  @page { size: A4 portrait; margin: 12mm; }
+  body { background: #fff; }
+  header, .no-print { display: none !important; }
+  main { padding: 0; max-width: none; }
+  .tab { display: none !important; }
+  #tab-invoice { display: block !important; }
+  .invoice { border: none; margin: 0; padding: 0; }
+  .invoice tr { page-break-inside: avoid; }
+}

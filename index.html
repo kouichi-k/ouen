@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>応援管理・請求書</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="no-print">
+  <h1>応援管理・請求書</h1>
+  <nav>
+    <button data-tab="entry" class="active">記録入力</button>
+    <button data-tab="list">一覧</button>
+    <button data-tab="invoice">請求書</button>
+    <button data-tab="settings">設定</button>
+  </nav>
+</header>
+
+<main>
+  <!-- 記録入力 -->
+  <section id="tab-entry" class="tab active no-print">
+    <h2 id="entry-title">応援記録の入力</h2>
+    <form id="entry-form" autocomplete="off">
+      <input type="hidden" name="id">
+      <div class="grid">
+        <label>日付<input type="date" name="date" required></label>
+        <label>応援先<select name="clientId" required></select></label>
+        <label class="wide">現場名<input type="text" name="site" list="site-list" placeholder="例：〇〇マンション新築工事"></label>
+        <label class="wide">作業内容<input type="text" name="work" list="work-list" placeholder="例：型枠組立" required></label>
+        <label>人数（人工）<input type="number" name="workers" step="0.5" min="0" value="1" required></label>
+        <label>単価（円/人工）<input type="number" name="unitPrice" step="1" min="0" required></label>
+        <label>残業（時間・延べ）<input type="number" name="otHours" step="0.5" min="0" value="0"></label>
+        <label>残業単価（円/時間）<input type="number" name="otRate" step="1" min="0" value="0"></label>
+        <label>経費（交通費・駐車場など）<input type="number" name="expense" step="1" min="0" value="0"></label>
+        <label>経費の内容<input type="text" name="expenseNote" placeholder="例：高速代"></label>
+        <label class="wide">作業員名<input type="text" name="members" placeholder="例：山田、佐藤"></label>
+        <label class="wide">備考<input type="text" name="note"></label>
+      </div>
+      <p class="calc">金額（税抜）：<strong id="entry-amount">0</strong> 円</p>
+      <div class="actions">
+        <button type="submit" class="primary">保存</button>
+        <button type="button" id="entry-cancel" class="hidden">編集をやめる</button>
+      </div>
+    </form>
+    <datalist id="site-list"></datalist>
+    <datalist id="work-list">
+      <option value="型枠組立"><option value="型枠解体"><option value="型枠加工"><option value="型枠建込み">
+      <option value="墨出し"><option value="スラブ型枠"><option value="基礎型枠"><option value="手元・雑工">
+    </datalist>
+    <h3>最近の記録</h3>
+    <div id="recent"></div>
+  </section>
+
+  <!-- 一覧 -->
+  <section id="tab-list" class="tab no-print">
+    <h2>応援記録の一覧</h2>
+    <div class="filters">
+      <label>月<input type="month" id="list-month"></label>
+      <label>応援先<select id="list-client"></select></label>
+      <button id="list-csv">CSV出力</button>
+    </div>
+    <div id="list-summary" class="summary"></div>
+    <div class="table-wrap"><table id="list-table"></table></div>
+  </section>
+
+  <!-- 請求書 -->
+  <section id="tab-invoice" class="tab">
+    <div class="no-print">
+      <h2>請求書の作成</h2>
+      <div class="filters">
+        <label>請求月<input type="month" id="inv-month"></label>
+        <label>請求先<select id="inv-client"></select></label>
+        <label>請求日<input type="date" id="inv-date"></label>
+        <label>請求番号<input type="text" id="inv-no"></label>
+      </div>
+      <p class="hint" id="inv-period"></p>
+      <div class="actions">
+        <button id="inv-print" class="primary">印刷 / PDF保存</button>
+        <button id="inv-mark">この期間を「請求済み」にする</button>
+      </div>
+    </div>
+    <div id="invoice" class="invoice"></div>
+  </section>
+
+  <!-- 設定 -->
+  <section id="tab-settings" class="tab no-print">
+    <h2>自社情報（請求書の発行元）</h2>
+    <form id="company-form" class="grid">
+      <label class="wide">会社名<input name="name" placeholder="例：〇〇工務店"></label>
+      <label>代表者<input name="rep"></label>
+      <label>適格請求書発行事業者 登録番号<input name="regNo" placeholder="T1234567890123"></label>
+      <label>郵便番号<input name="zip"></label>
+      <label class="wide">住所<input name="address"></label>
+      <label>電話<input name="tel"></label>
+      <label>FAX<input name="fax"></label>
+      <label class="wide">振込先<textarea name="bank" rows="3" placeholder="〇〇銀行 〇〇支店 普通 1234567&#10;口座名義 カ）〇〇"></textarea></label>
+      <label>消費税率（%）<input type="number" name="taxRate" value="10" min="0"></label>
+      <label>端数処理<select name="rounding"><option value="floor">切り捨て</option><option value="round">四捨五入</option><option value="ceil">切り上げ</option></select></label>
+      <div class="actions wide"><button type="submit" class="primary">自社情報を保存</button></div>
+    </form>
+
+    <h2>応援先（取引先）</h2>
+    <form id="client-form" class="grid" autocomplete="off">
+      <input type="hidden" name="id">
+      <label class="wide">会社名<input name="name" required placeholder="例：株式会社△△建設"></label>
+      <label>敬称<select name="honor"><option>御中</option><option>様</option></select></label>
+      <label>締め日<select name="closing">
+        <option value="0">末日</option><option value="5">5日</option><option value="10">10日</option><option value="15">15日</option><option value="20">20日</option><option value="25">25日</option>
+      </select></label>
+      <label>標準単価（円/人工）<input type="number" name="unitPrice" min="0" value="0"></label>
+      <label>標準残業単価（円/時間）<input type="number" name="otRate" min="0" value="0"></label>
+      <label>支払条件<input name="payTerms" placeholder="例：翌月末払い"></label>
+      <label class="wide">住所<input name="address"></label>
+      <div class="actions wide">
+        <button type="submit" class="primary">応援先を保存</button>
+        <button type="button" id="client-cancel" class="hidden">編集をやめる</button>
+      </div>
+    </form>
+    <div id="client-list"></div>
+
+    <h2>データの保存・移行</h2>
+    <p class="hint">データはこの端末のブラウザ内に保存されます。機種変更や別の端末で使う時、念のための控えとして、定期的にバックアップしてください。</p>
+    <div class="actions">
+      <button id="backup">バックアップを保存</button>
+      <label class="filebtn">バックアップから復元<input type="file" id="restore" accept="application/json"></label>
+    </div>
+  </section>
+</main>
+<div id="toast" class="no-print"></div>
+<script src="app.js"></script>
+</body>
+</html>
