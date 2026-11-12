@@ -143,6 +143,20 @@
       <label class="wide">振込先<textarea name="bank" rows="3" placeholder="〇〇銀行 〇〇支店 普通 1234567&#10;口座名義 カ）〇〇"></textarea></label>
       <label>消費税率（%）<input type="number" name="taxRate" value="10" min="0"></label>
       <label>端数処理<select name="rounding"><option value="floor">切り捨て</option><option value="round">四捨五入</option><option value="ceil">切り上げ</option></select></label>
+      <div class="wide seal-box">
+        <div class="seal-title">角印（請求書に押す印）</div>
+        <div class="seal-row">
+          <div class="seal-preview" id="seal-preview"><span>未登録</span></div>
+          <div class="seal-ctrl">
+            <input type="hidden" name="sealImage">
+            <label class="filebtn">印の画像を選ぶ<input type="file" id="seal-file" accept="image/*"></label>
+            <button type="button" id="seal-clear" class="danger hidden">印の画像を削除</button>
+            <label>請求書に押印<select name="sealOn"><option value="on">押す</option><option value="off">押さない</option></select></label>
+            <label>印の大きさ<select name="sealSize"><option value="21">21mm</option><option value="24" selected>24mm</option><option value="30">30mm</option></select></label>
+          </div>
+        </div>
+        <p class="hint">白い紙に押した角印をスマホで真上から撮り、印のまわりだけになるよう切り抜いてから選んでください。背景は自動で透明になり、朱色に整えます。透明背景の印鑑画像（PNG）もそのまま使えます。</p>
+      </div>
       <div class="actions wide"><button type="submit" class="primary">自社情報を保存</button></div>
     </form>
 

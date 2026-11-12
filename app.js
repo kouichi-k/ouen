@@ -271,6 +271,12 @@ const fromLines = (co) => [
   [co.tel ? `TEL ${esc(co.tel)}` : '', co.fax ? `FAX ${esc(co.fax)}` : ''].filter(Boolean).join('　'),
   co.regNo ? `登録番号 ${esc(co.regNo)}` : '',
 ].filter(Boolean).map((t) => `<div>${t}</div>`).join('');
+// 角印（mm指定 → 請求書の幅760px＝A4の210mm換算）
+function sealHtml(co) {
+  if (!co.sealImage || co.sealOn === 'off') return '';
+  const px = Math.round((num(co.sealSize) || 24) * 760 / 210);
+  return `<img class="seal" src="${co.sealImage}" alt="" style="width:${px}px;height:${px}px">`;
+}
 const lineRows = (d, cols) => d.lines.map((l) => `<tr>${cols(l)}</tr>`).join('');
 const bankText = (d) => esc(d.co.bank || '');
 
@@ -294,7 +300,7 @@ const INVOICE_STYLES = {
           <div class="a-fromname">${esc(d.co.name || '（設定で自社名を入力）')}</div>
           ${d.co.rep ? `<div>${esc(d.co.rep)}</div>` : ''}
           ${fromLines(d.co)}
-          <div class="a-seal">印</div>
+          ${sealHtml(d.co) || (d.co.sealOn === 'off' ? '' : '<div class="a-seal">印</div>')}
         </div>
       </div>
       <div class="a-total"><span>ご請求金額（税込）</span><strong>¥${yen(d.total)}</strong></div>
@@ -337,6 +343,7 @@ const INVOICE_STYLES = {
           <div class="b-fromname">${esc(d.co.name || '（設定で自社名を入力）')}</div>
           ${d.co.rep ? `<div class="b-small">${esc(d.co.rep)}</div>` : ''}
           <div class="b-small">${fromLines(d.co)}</div>
+          ${sealHtml(d.co)}
         </div>
       </div>
       <div class="b-total">
@@ -374,6 +381,7 @@ const INVOICE_STYLES = {
           <div class="c-fromname">${esc(d.co.name || '（設定で自社名を入力）')}</div>
           ${d.co.rep ? `<div>${esc(d.co.rep)}</div>` : ''}
           ${fromLines(d.co)}
+          ${sealHtml(d.co)}
           <table class="c-stamps"><tr><th>担当</th><th>確認</th></tr><tr><td></td><td></td></tr></table>
         </div>
       </div>
@@ -421,7 +429,68 @@ $('#inv-mark').addEventListener('click', () => {
 const cf = $('#company-form');
 function fillCompany() {
   for (const el of cf.elements) if (el.name) el.value = db.company[el.name] ?? el.value;
+  renderSealPreview();
 }
+function renderSealPreview() {
+  const src = db.company.sealImage;
+  $('#seal-preview').innerHTML = src ? `<img src="${src}" alt="登録した角印">` : '<span>未登録</span>';
+  $('#seal-clear').classList.toggle('hidden', !src);
+}
+function saveSeal(dataUrl) {
+  db.company.sealImage = dataUrl;
+  cf.sealImage.value = dataUrl;
+  commit([{ op: 'setCompany', data: db.company }]);
+  renderSealPreview();
+}
+
+// 写真の印影を「背景透明・朱色・余白なし」の画像にする
+async function makeSealImage(file) {
+  const img = await new Promise((ok, ng) => {
+    const im = new Image(); im.onload = () => ok(im); im.onerror = () => ng(new Error('画像を読み込めませんでした'));
+    im.src = URL.createObjectURL(file);
+  });
+  const scale = Math.min(1, 700 / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale)), h = Math.max(1, Math.round(img.height * scale));
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const g = cv.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  URL.revokeObjectURL(img.src);
+  const px = g.getImageData(0, 0, w, h); const a = px.data;
+  // 紙の明るさを推定（明るい方から5%の値）して、それより暗い所を印とみなす
+  const lum = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) lum[i] = (a[i * 4] * 0.3 + a[i * 4 + 1] * 0.59 + a[i * 4 + 2] * 0.11) | 0;
+  const sorted = Array.from(lum).sort((x, y) => x - y);
+  const paper = Math.max(150, sorted[Math.floor(sorted.length * 0.95)]);
+  const ink = Math.min(paper - 60, sorted[Math.floor(sorted.length * 0.02)] + 20);
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  for (let i = 0; i < w * h; i++) {
+    const t = Math.min(1, Math.max(0, (paper - 12 - lum[i]) / Math.max(20, paper - 12 - ink)));
+    const alpha = Math.round(t * (a[i * 4 + 3] / 255) * 255);
+    a[i * 4] = 205; a[i * 4 + 1] = 32; a[i * 4 + 2] = 38; a[i * 4 + 3] = alpha;
+    if (alpha > 40) { const x = i % w, y = (i / w) | 0; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  }
+  if (maxX < 0) throw new Error('印が見つかりませんでした。白い紙に押した印を明るい場所で撮ってください');
+  g.putImageData(px, 0, 0);
+  // 余白を詰めて正方形に配置（スプレッドシートに保存できる大きさまで縮める）
+  const bw = maxX - minX + 1, bh = maxY - minY + 1, side = Math.max(bw, bh);
+  for (const size of [300, 240, 190, 150]) {
+    const out = document.createElement('canvas'); out.width = out.height = size;
+    const k = (size * 0.96) / side;
+    out.getContext('2d').drawImage(cv, minX, minY, bw, bh, (size - bw * k) / 2, (size - bh * k) / 2, bw * k, bh * k);
+    const url = out.toDataURL('image/png');
+    if (url.length < 45000) return url;
+  }
+  throw new Error('画像が細かすぎて保存できません。印のまわりだけに切り抜いてから選んでください');
+}
+$('#seal-file').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { saveSeal(await makeSealImage(f)); toast('角印を登録しました'); }
+  catch (err) { alert(err.message); }
+});
+$('#seal-clear').addEventListener('click', () => {
+  if (!confirm('登録した角印の画像を削除しますか？')) return;
+  saveSeal(''); toast('角印を削除しました');
+});
 cf.addEventListener('submit', (e) => {
   e.preventDefault();
   db.company = Object.assign({}, db.company, Object.fromEntries(new FormData(cf)));
