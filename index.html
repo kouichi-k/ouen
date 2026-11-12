@@ -103,12 +103,17 @@
           <button type="button" id="sync-now" class="primary">今すぐ同期</button>
           <button type="button" id="sync-disconnect" class="danger">この端末の連携を解除</button>
         </div>
+        <div class="link-box">
+          <div class="seal-title">接続用リンク（ほかの端末をつなぐ時に使います）</div>
+          <div class="link-row"><input type="text" id="link-text" readonly><button type="button" id="link-copy">コピー</button></div>
+          <p class="hint">このリンクを自分のスマホやパソコンに送り、タップして開くとすぐにつながります。ホーム画面のアイコンから使う時は、アプリの「設定」の「ウェブアプリURL」欄にこのリンクを貼り付けて「接続する」を押してください。<br><b>合言葉が入っているので、他の人には送らないでください。</b></p>
+        </div>
       </div>
       <div id="sync-off" class="wide">
         <p class="hint">GoogleスプレッドシートのウェブアプリURLと合言葉を入れると、どの端末で入力しても同じデータになります。準備の手順は下の「準備のしかた」を見てください。</p>
       </div>
       <form id="sync-form" class="wide grid-inner" autocomplete="off">
-        <label class="wide">ウェブアプリURL<input type="url" id="sync-url" placeholder="https://script.google.com/macros/s/……/exec"></label>
+        <label class="wide">ウェブアプリURL（または接続用リンク）<input type="text" inputmode="url" id="sync-url" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/……/exec"></label>
         <label>合言葉<input type="text" id="sync-pass" autocapitalize="off" spellcheck="false"></label>
         <div class="actions wide"><button type="submit" id="sync-connect" class="primary">接続する</button></div>
       </form>

@@ -622,7 +622,7 @@ function init() {
   $('#list-month').value = thisMonth();
   $('#inv-month').value = thisMonth();
   $('#inv-no').value = '';
-  if (!db.clients.length) showTab('settings');
+  showTab(!db.clients.length && !syncOn() ? 'settings' : 'entry');
 }
 
 // 他の端末の変更を取り込んだ時、入力中の内容は残したまま画面を描き直す
@@ -719,6 +719,7 @@ function renderSyncPanel() {
   $('#sync-on').classList.toggle('hidden', !on);
   $('#sync-off').classList.toggle('hidden', on);
   $('#sync-form').classList.toggle('hidden', on);
+  if (on) $('#link-text').value = makeConnectLink(sync.url, sync.key);
   if (on) {
     $('#sync-status').textContent = syncState === 'error'
       ? `つながりませんでした：${syncError}${outbox.length ? `（未送信の変更 ${outbox.length}件は、つながった時に送ります）` : ''}`
@@ -727,11 +728,24 @@ function renderSyncPanel() {
   }
 }
 
-$('#sync-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const url = $('#sync-url').value.trim(), key = $('#sync-pass').value.trim();
-  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { alert('URLは「https://script.google.com/」で始まり「/exec」で終わるものを貼り付けてください'); return; }
-  if (!key) { alert('合言葉を入力してください'); return; }
+// 接続用リンク：URLと合言葉を1本のリンクにまとめる（# 以降はサーバーに送られない）
+function makeConnectLink(url, key) {
+  const code = btoa(unescape(encodeURIComponent(JSON.stringify({ u: url, k: key })))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return `${location.origin}${location.pathname}#connect=${code}`;
+}
+function parseConnectLink(text) {
+  const m = String(text || '').match(/#connect=([A-Za-z0-9_-]+)/);
+  if (!m) return null;
+  try {
+    const b = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    const o = JSON.parse(decodeURIComponent(escape(atob(b + '='.repeat((4 - b.length % 4) % 4)))));
+    return o && o.u && o.k ? { url: o.u, key: o.k } : null;
+  } catch (e) { return null; }
+}
+
+async function connectSync(url, key) {
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { alert('URLは「https://script.google.com/」で始まり「/exec」で終わるもの（または接続用リンク）を貼り付けてください'); return false; }
+  if (!key) { alert('合言葉を入力してください'); return false; }
   const btn = $('#sync-connect'); btn.disabled = true; btn.textContent = '接続中…';
   const prev = sync;
   sync = { url, key, linked: false };
@@ -746,15 +760,36 @@ $('#sync-form').addEventListener('submit', async (e) => {
     if (!(server.company && server.company.name) && db.company.name) { ops.push({ op: 'setCompany', data: db.company }); server.company = db.company; }
     sync.linked = true; writeLS(SYNC_KEY, sync);
     outbox = ops; writeLS(OUTBOX_KEY, outbox);
+    $('#sync-url').value = url; $('#sync-pass').value = key;
     applyServer(server);
     await flush();
     toast('スプレッドシートとつながりました');
+    if (db.clients.length) showTab('entry');
+    return true;
   } catch (err) {
     sync = prev;
     alert('つながりませんでした：' + err.message);
+    return false;
   } finally {
     btn.disabled = false; btn.textContent = '接続する'; setSync(syncState);
   }
+}
+$('#sync-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const raw = $('#sync-url').value.trim();
+  const link = parseConnectLink(raw);
+  if (link) connectSync(link.url, link.key);
+  else connectSync(raw, $('#sync-pass').value.trim());
+});
+// URL欄に接続用リンクを貼り付けたら、合言葉も自動で入れる
+$('#sync-url').addEventListener('input', () => {
+  const link = parseConnectLink($('#sync-url').value);
+  if (link) { $('#sync-url').value = link.url; $('#sync-pass').value = link.key; toast('接続用リンクを読み取りました。「接続する」を押してください'); }
+});
+$('#link-copy').addEventListener('click', async () => {
+  const t = $('#link-text');
+  try { await navigator.clipboard.writeText(t.value); toast('接続用リンクをコピーしました'); }
+  catch (e) { t.focus(); t.select(); toast('選択しました。コピーしてください'); }
 });
 $('#sync-now').addEventListener('click', () => pull());
 $('#sync-disconnect').addEventListener('click', () => {
@@ -779,4 +814,12 @@ setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 60000
 init();
 if (sync.url) { $('#sync-url').value = sync.url; $('#sync-pass').value = sync.key || ''; }
 setSync('idle');
-pull();
+const linkInUrl = parseConnectLink(location.hash);
+if (linkInUrl) {
+  // 接続用リンクから開いた：アドレス欄から合言葉を消してから接続
+  history.replaceState(null, '', location.pathname + location.search);
+  if (syncOn() && sync.url === linkInUrl.url && sync.key === linkInUrl.key) { toast('すでにつながっています'); pull(); }
+  else connectSync(linkInUrl.url, linkInUrl.key);
+} else {
+  pull();
+}

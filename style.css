@@ -186,3 +186,7 @@ button:disabled { opacity: .5; }
   background: repeating-conic-gradient(#f0f0f0 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
 .seal-preview img { max-width: 96px; max-height: 96px; }
 .seal-ctrl { display: flex; flex-direction: column; gap: 8px; min-width: 0; flex: 1; max-width: 260px; }
+
+.link-box { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.link-row { display: flex; gap: 8px; }
+.link-row input { flex: 1; min-width: 0; font-size: 13px; }
