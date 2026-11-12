@@ -89,7 +89,9 @@ function refreshSelects() {
 
 // ===== 記録入力 =====
 const ef = $('#entry-form');
+let entryDirty = false; // 入力途中かどうか（同期で上書きしないため）
 function resetEntry() {
+  entryDirty = false;
   ef.reset();
   ef.id.value = '';
   ef.date.value = today();
@@ -109,7 +111,7 @@ function updateEntryAmount() {
   $('#entry-amount').textContent = yen(amountOf(Object.fromEntries(new FormData(ef))));
 }
 ef.clientId.addEventListener('change', () => { if (!ef.id.value) applyClientDefaults(); updateEntryAmount(); });
-ef.addEventListener('input', updateEntryAmount);
+ef.addEventListener('input', () => { entryDirty = true; updateEntryAmount(); });
 ef.addEventListener('submit', (e) => {
   e.preventDefault();
   if (!db.clients.length) { alert('先に「設定」で応援先を登録してください'); showTab('settings'); return; }
@@ -121,7 +123,7 @@ ef.addEventListener('submit', (e) => {
   };
   const i = db.records.findIndex((r) => r.id === rec.id);
   if (i >= 0) { rec.billed = db.records[i].billed; db.records[i] = rec; } else db.records.push(rec);
-  save(); refreshSelects();
+  commit([{ op: 'upsertRecord', data: rec }]); refreshSelects();
   toast(i >= 0 ? '更新しました' : '保存しました');
   const wasEdit = i >= 0;
   resetEntry(); renderRecent();
@@ -150,7 +152,7 @@ function deleteRecord(id) {
   const r = db.records.find((x) => x.id === id); if (!r) return;
   if (!confirm(`${jpDate(r.date)} ${clientName(r.clientId)} の記録を削除しますか？`)) return;
   db.records = db.records.filter((x) => x.id !== id);
-  save(); renderList(); renderRecent(); toast('削除しました');
+  commit([{ op: 'deleteRecord', id }]); renderList(); renderRecent(); toast('削除しました');
 }
 
 function renderRecent() {
@@ -304,7 +306,7 @@ $('#inv-mark').addEventListener('click', () => {
   const no = $('#inv-no').value;
   if (!confirm(`${rs.length}件の記録を請求番号「${no}」で請求済みにしますか？`)) return;
   rs.forEach((r) => { r.billed = no; });
-  save(); toast('請求済みにしました');
+  commit(rs.map((r) => ({ op: 'upsertRecord', data: r }))); renderInvoice(); toast('請求済みにしました');
 });
 
 // ===== 設定 =====
@@ -315,7 +317,7 @@ function fillCompany() {
 cf.addEventListener('submit', (e) => {
   e.preventDefault();
   db.company = Object.fromEntries(new FormData(cf));
-  save(); toast('自社情報を保存しました');
+  commit([{ op: 'setCompany', data: db.company }]); renderInvoice(); toast('自社情報を保存しました');
 });
 
 const clf = $('#client-form');
@@ -326,7 +328,7 @@ clf.addEventListener('submit', (e) => {
   const c = { ...f, id: f.id || uid(), name: f.name.trim(), unitPrice: num(f.unitPrice), otRate: num(f.otRate) };
   const i = db.clients.findIndex((x) => x.id === c.id);
   if (i >= 0) db.clients[i] = c; else db.clients.push(c);
-  save(); resetClient(); renderClients(); refreshSelects();
+  commit([{ op: 'upsertClient', data: c }]); resetClient(); renderClients(); refreshSelects();
   if (!ef.id.value) { if (!ef.clientId.value) ef.clientId.value = c.id; applyClientDefaults(); updateEntryAmount(); }
   toast('応援先を保存しました');
 });
@@ -352,7 +354,7 @@ $('#client-list').addEventListener('click', (e) => {
     if (n) { alert(`この応援先には${n}件の記録があるため削除できません`); return; }
     if (!confirm('削除しますか？')) return;
     db.clients = db.clients.filter((c) => c.id !== cdel);
-    save(); renderClients(); refreshSelects();
+    commit([{ op: 'deleteClient', id: cdel }]); renderClients(); refreshSelects();
   }
 });
 
@@ -369,7 +371,7 @@ $('#restore').addEventListener('change', async (e) => {
     const d = JSON.parse(await file.text());
     if (!Array.isArray(d.records) || !Array.isArray(d.clients)) throw new Error();
     if (!confirm(`記録${d.records.length}件・応援先${d.clients.length}件で今のデータを置き換えますか？`)) return;
-    db = Object.assign(empty(), d); save(); init(); toast('復元しました');
+    db = Object.assign(empty(), d); commit([{ op: 'replaceAll', data: db }]); init(); toast('復元しました');
   } catch (err) { alert('バックアップファイルを読み込めませんでした'); }
   e.target.value = '';
 });
@@ -382,4 +384,159 @@ function init() {
   $('#inv-no').value = '';
   if (!db.clients.length) showTab('settings');
 }
+
+// 他の端末の変更を取り込んだ時、入力中の内容は残したまま画面を描き直す
+function rerenderAll() {
+  refreshSelects(); renderClients(); renderRecent();
+  if (!cf.contains(document.activeElement)) fillCompany();
+  if (!ef.id.value && !entryDirty) resetEntry();
+  if ($('#tab-list').classList.contains('active')) renderList();
+  if ($('#tab-invoice').classList.contains('active')) renderInvoice();
+}
+
+// ===== Googleスプレッドシート連携 =====
+const SYNC_KEY = 'ouen-sync-v1';
+const OUTBOX_KEY = 'ouen-outbox-v1';
+let sync = readLS(SYNC_KEY, {});           // { url, key, linked }
+let outbox = readLS(OUTBOX_KEY, []);       // まだ送れていない変更
+let syncState = 'idle';                    // idle | busy | error
+let syncError = '';
+let flushing = false;
+
+function readLS(k, def) { try { return JSON.parse(localStorage.getItem(k)) || def; } catch (e) { return def; } }
+function writeLS(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* 保存できなくても続行 */ } }
+const syncOn = () => !!(sync.url && sync.key && sync.linked);
+
+// データを変更した時はここを通す：端末に保存し、連携中ならスプレッドシートにも送る
+function commit(ops) {
+  save();
+  if (!syncOn()) return;
+  outbox.push(...JSON.parse(JSON.stringify(ops)));
+  writeLS(OUTBOX_KEY, outbox);
+  flush();
+}
+
+async function api(method, payload) {
+  let res;
+  try {
+  if (method === 'GET') {
+    res = await fetch(`${sync.url}?action=load&key=${encodeURIComponent(sync.key)}`, { redirect: 'follow' });
+  } else {
+    // text/plain で送ると Google 側で受け取れる（事前確認の通信が不要になる）
+    res = await fetch(sync.url, { method: 'POST', redirect: 'follow', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ key: sync.key, ops: payload }) });
+  }
+  } catch (e) { throw new Error('ネットにつながっていません'); }
+  let out;
+  try { out = await res.json(); } catch (e) { throw new Error('スプレッドシートから正しい返事がありません。URLとデプロイ設定（アクセスできるユーザー：全員）を確認してください'); }
+  if (!out.ok) throw new Error(out.error || '不明なエラー');
+  return out.data;
+}
+
+function applyServer(d) {
+  db = Object.assign(empty(), { company: Object.assign({ taxRate: 10, rounding: 'floor' }, d.company || {}), clients: d.clients || [], records: d.records || [] });
+  save(); rerenderAll();
+}
+
+async function flush() {
+  if (flushing || !syncOn()) return;
+  flushing = true; setSync('busy');
+  try {
+    while (outbox.length) {
+      const batch = outbox.slice(0, 300);
+      const data = await api('POST', batch);
+      outbox.splice(0, batch.length); writeLS(OUTBOX_KEY, outbox);
+      if (!outbox.length) applyServer(data);
+    }
+    setSync('idle');
+  } catch (e) {
+    setSync('error', e.message);
+  } finally { flushing = false; }
+}
+
+async function pull() {
+  if (!syncOn() || flushing) return;
+  if (outbox.length) return flush();
+  setSync('busy');
+  try { applyServer(await api('GET')); setSync('idle'); } catch (e) { setSync('error', e.message); }
+}
+
+function setSync(state, msg) {
+  syncState = state; syncError = msg || '';
+  const el = $('#sync-state');
+  const n = outbox.length;
+  let text = '', cls = '';
+  if (!syncOn()) { text = 'この端末のみ'; cls = 'local'; }
+  else if (state === 'busy') { text = '同期中…'; }
+  else if (state === 'error') { text = n ? `未送信 ${n}件` : '同期できません'; cls = 'warn'; }
+  else { text = n ? `未送信 ${n}件` : '同期済み'; cls = n ? 'warn' : 'ok'; }
+  el.textContent = text; el.className = 'sync ' + cls;
+  el.title = syncError;
+  renderSyncPanel();
+}
+
+function renderSyncPanel() {
+  const on = syncOn();
+  $('#sync-on').classList.toggle('hidden', !on);
+  $('#sync-off').classList.toggle('hidden', on);
+  $('#sync-form').classList.toggle('hidden', on);
+  if (on) {
+    $('#sync-status').textContent = syncState === 'error'
+      ? `つながりませんでした：${syncError}${outbox.length ? `（未送信の変更 ${outbox.length}件は、つながった時に送ります）` : ''}`
+      : outbox.length ? `未送信の変更が ${outbox.length}件あります` : 'スプレッドシートとつながっています。どの端末で入力しても同じデータになります。';
+    $('#sync-status').className = 'hint' + (syncState === 'error' ? ' warn-text' : '');
+  }
+}
+
+$('#sync-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = $('#sync-url').value.trim(), key = $('#sync-pass').value.trim();
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)) { alert('URLは「https://script.google.com/」で始まり「/exec」で終わるものを貼り付けてください'); return; }
+  if (!key) { alert('合言葉を入力してください'); return; }
+  const btn = $('#sync-connect'); btn.disabled = true; btn.textContent = '接続中…';
+  const prev = sync;
+  sync = { url, key, linked: false };
+  try {
+    const server = await api('GET');
+    // 初めてつなぐ時：この端末にしかないデータもスプレッドシートに送る（同じIDはスプレッドシート側を優先）
+    const ops = [];
+    const sIds = new Set(server.records.map((r) => r.id));
+    const cIds = new Set(server.clients.map((c) => c.id));
+    db.clients.filter((c) => !cIds.has(c.id)).forEach((c) => { ops.push({ op: 'upsertClient', data: c }); server.clients.push(c); });
+    db.records.filter((r) => !sIds.has(r.id)).forEach((r) => { ops.push({ op: 'upsertRecord', data: r }); server.records.push(r); });
+    if (!(server.company && server.company.name) && db.company.name) { ops.push({ op: 'setCompany', data: db.company }); server.company = db.company; }
+    sync.linked = true; writeLS(SYNC_KEY, sync);
+    outbox = ops; writeLS(OUTBOX_KEY, outbox);
+    applyServer(server);
+    await flush();
+    toast('スプレッドシートとつながりました');
+  } catch (err) {
+    sync = prev;
+    alert('つながりませんでした：' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '接続する'; setSync(syncState);
+  }
+});
+$('#sync-now').addEventListener('click', () => pull());
+$('#sync-disconnect').addEventListener('click', () => {
+  if (outbox.length && !confirm(`まだ送れていない変更が${outbox.length}件あります。連携を解除すると、その変更はスプレッドシートに送られません。解除しますか？`)) return;
+  if (!outbox.length && !confirm('この端末のスプレッドシート連携を解除しますか？（データはこの端末とスプレッドシートの両方に残ります）')) return;
+  sync = {}; outbox = []; writeLS(SYNC_KEY, sync); writeLS(OUTBOX_KEY, outbox);
+  setSync('idle'); toast('連携を解除しました');
+});
+$('#gas-copy').addEventListener('click', async () => {
+  const ta = $('#gas-code');
+  try { await navigator.clipboard.writeText(ta.value); toast('コピーしました'); }
+  catch (e) { ta.focus(); ta.select(); toast('選択しました。コピーしてください'); }
+});
+fetch('gas/Code.gs').then((r) => r.ok ? r.text() : Promise.reject()).then((t) => { $('#gas-code').value = t; })
+  .catch(() => { $('#gas-code').value = '（読み込めませんでした。GitHub の gas/Code.gs を開いてコピーしてください）'; });
+
+// 画面に戻ってきた時・電波が戻った時・定期的に最新を取り込む
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') pull(); });
+window.addEventListener('online', () => pull());
+setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 60000);
+
 init();
+if (sync.url) { $('#sync-url').value = sync.url; $('#sync-pass').value = sync.key || ''; }
+setSync('idle');
+pull();

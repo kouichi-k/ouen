@@ -73,3 +73,17 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .invoice { border: none; margin: 0; padding: 0; }
   .invoice tr { page-break-inside: avoid; }
 }
+
+.sync { font-size: 12px; font-weight: normal; padding: 2px 8px; border-radius: 10px; background: #57606a; color: #fff; margin-left: 6px; vertical-align: middle; white-space: nowrap; }
+.sync.ok { background: #1a7f37; }
+.sync.warn { background: #bf8700; }
+.sync.local { background: #57606a; }
+.warn-text { color: #9a6700; }
+.grid-inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 14px; }
+.grid-inner .wide { grid-column: 1 / -1; }
+.setup summary { cursor: pointer; color: var(--accent); font-size: 15px; }
+.setup ol { padding-left: 1.4em; line-height: 1.7; }
+.setup code { background: #eaeef2; padding: 1px 4px; border-radius: 4px; }
+#gas-code { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .5; }

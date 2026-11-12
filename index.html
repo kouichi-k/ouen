@@ -14,7 +14,7 @@
 </head>
 <body>
 <header class="no-print">
-  <h1>応援管理・請求書</h1>
+  <h1>応援管理・請求書 <span id="sync-state" class="sync"></span></h1>
   <nav>
     <button data-tab="entry" class="active">記録入力</button>
     <button data-tab="list">一覧</button>
@@ -91,6 +91,42 @@
 
   <!-- 設定 -->
   <section id="tab-settings" class="tab no-print">
+    <h2>スマホとパソコンをつなぐ（Googleスプレッドシート）</h2>
+    <div class="grid">
+      <div id="sync-on" class="wide hidden">
+        <p id="sync-status" class="hint"></p>
+        <div class="actions">
+          <button type="button" id="sync-now" class="primary">今すぐ同期</button>
+          <button type="button" id="sync-disconnect" class="danger">この端末の連携を解除</button>
+        </div>
+      </div>
+      <div id="sync-off" class="wide">
+        <p class="hint">GoogleスプレッドシートのウェブアプリURLと合言葉を入れると、どの端末で入力しても同じデータになります。準備の手順は下の「準備のしかた」を見てください。</p>
+      </div>
+      <form id="sync-form" class="wide grid-inner" autocomplete="off">
+        <label class="wide">ウェブアプリURL<input type="url" id="sync-url" placeholder="https://script.google.com/macros/s/……/exec"></label>
+        <label>合言葉<input type="text" id="sync-pass" autocapitalize="off" spellcheck="false"></label>
+        <div class="actions wide"><button type="submit" id="sync-connect" class="primary">接続する</button></div>
+      </form>
+      <details class="wide setup">
+        <summary>準備のしかた（最初に1回だけ。パソコンでの作業がおすすめ）</summary>
+        <ol>
+          <li><a href="https://sheets.new" target="_blank" rel="noopener">Googleスプレッドシート</a>を新しく作り、名前を「応援管理」などにする</li>
+          <li>メニューの「拡張機能」→「Apps Script」を開く</li>
+          <li>最初から書いてある文字を全部消し、下の「スクリプト」をコピーして貼り付ける</li>
+          <li>貼り付けた中の <code>ここを合言葉に変更</code> を、自分で決めた合言葉（英数字8文字以上がおすすめ）に書き換えて、保存（フロッピーのマーク）</li>
+          <li>右上の「デプロイ」→「新しいデプロイ」→ 歯車マークで「ウェブアプリ」を選ぶ</li>
+          <li>「次のユーザーとして実行」を <b>自分</b>、「アクセスできるユーザー」を <b>全員</b> にして「デプロイ」</li>
+          <li>「アクセスを承認」→ 自分のGoogleアカウントを選ぶ →「詳細」→「（安全ではないページ）に移動」→「許可」<br><small>※自分で作ったスクリプトなので、この警告が出ても問題ありません</small></li>
+          <li>表示された「ウェブアプリ」のURL（/exec で終わるもの）をコピーし、上の欄に貼り付けて合言葉と一緒に「接続する」</li>
+          <li>もう一方の端末（スマホ／パソコン）でも、同じURLと合言葉を入れて「接続する」</li>
+        </ol>
+        <p class="hint">スクリプトを書き換えた時は「デプロイ」→「デプロイを管理」→ 鉛筆マーク → バージョン「新バージョン」→「デプロイ」で反映されます（URLは変わりません）。</p>
+        <label>スクリプト<textarea id="gas-code" rows="8" readonly></textarea></label>
+        <div class="actions"><button type="button" id="gas-copy">スクリプトをコピー</button></div>
+      </details>
+    </div>
+
     <h2>自社情報（請求書の発行元）</h2>
     <form id="company-form" class="grid">
       <label class="wide">会社名<input name="name" placeholder="例：〇〇工務店"></label>
@@ -126,7 +162,7 @@
     <div id="client-list"></div>
 
     <h2>データの保存・移行</h2>
-    <p class="hint">データはこの端末のブラウザ内に保存されます。機種変更や別の端末で使う時、念のための控えとして、定期的にバックアップしてください。</p>
+    <p class="hint">データはこの端末にも保存されます（電波がない所でも入力でき、つながった時にスプレッドシートへ送ります）。念のための控えとして、時々バックアップを保存してください。</p>
     <div class="actions">
       <button id="backup">バックアップを保存</button>
       <label class="filebtn">バックアップから復元<input type="file" id="restore" accept="application/json"></label>
