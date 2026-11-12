@@ -16,17 +16,19 @@ const SHEETS = {
       ['id', 'ID'], ['date', '日付'], ['clientId', '応援先ID'], ['clientName', '応援先'],
       ['site', '現場名'], ['work', '作業内容'], ['workers', '人工'], ['unitPrice', '単価'],
       ['otHours', '残業時間'], ['otRate', '残業単価'], ['expense', '経費'], ['expenseNote', '経費内容'],
-      ['amount', '金額(税抜)'], ['members', '作業員'], ['note', '備考'], ['billed', '請求番号'], ['updatedAt', '更新日時'],
+      ['amount', '金額(税抜)'], ['members', '作業員'], ['note', '備考'], ['billed', '請求・支払'], ['updatedAt', '更新日時'],
+      ['dir', '種類'], ['extra', 'その他'],
     ],
-    text: ['id', 'date', 'clientId', 'clientName', 'site', 'work', 'expenseNote', 'members', 'note', 'billed', 'updatedAt'],
+    text: ['id', 'date', 'clientId', 'clientName', 'site', 'work', 'expenseNote', 'members', 'note', 'billed', 'updatedAt', 'dir', 'extra'],
+    labels: { dir: { out: '応援に行った', in: '来てもらった' } },
   },
   clients: {
     name: '応援先',
     cols: [
       ['id', 'ID'], ['name', '会社名'], ['honor', '敬称'], ['closing', '締め日'], ['unitPrice', '標準単価'],
-      ['otRate', '標準残業単価'], ['payTerms', '支払条件'], ['address', '住所'],
+      ['otRate', '標準残業単価'], ['payTerms', '支払条件'], ['address', '住所'], ['extra', 'その他'],
     ],
-    text: ['id', 'name', 'honor', 'closing', 'payTerms', 'address'],
+    text: ['id', 'name', 'honor', 'closing', 'payTerms', 'address', 'extra'],
   },
 };
 const COMPANY_SHEET = '自社情報';
@@ -35,12 +37,13 @@ const COMPANY_LABELS = {
   bank: '振込先', taxRate: '消費税率(%)', rounding: '端数処理', invoiceStyle: '請求書デザイン', sealImage: '角印画像', sealOn: '押印', sealSize: '印の大きさ(mm)',
 };
 const NUM_KEYS = ['workers', 'unitPrice', 'otHours', 'otRate', 'expense', 'amount'];
+const VERSION = 2;
 
 // ===== 受付 =====
 function doGet(e) {
   return handle(function () {
     checkPassword(e.parameter.key);
-    return { ok: true, data: loadAll() };
+    return { ok: true, version: VERSION, data: loadAll() };
   });
 }
 
@@ -52,7 +55,7 @@ function doPost(e) {
     lock.waitLock(30000);
     try {
       applyOps(body.ops || []);
-      return { ok: true, data: loadAll() };
+      return { ok: true, version: VERSION, data: loadAll() };
     } finally {
       lock.releaseLock();
     }
@@ -147,8 +150,13 @@ function readTable(kind) {
         if (v instanceof Date) v = Utilities.formatDate(v, tz, c[0] === 'updatedAt' ? 'yyyy-MM-dd HH:mm' : 'yyyy-MM-dd');
         if (NUM_KEYS.indexOf(c[0]) >= 0) v = num(v);
         else v = v === null || v === undefined ? '' : String(v);
+        const lab = def.labels && def.labels[c[0]];
+        if (lab) Object.keys(lab).forEach(function (k) { if (lab[k] === v) v = k; });
         o[c[0]] = v;
       });
+      // 列にない項目は「その他」列にまとめて保存してある
+      if (o.extra) { try { const ex = JSON.parse(o.extra); Object.keys(ex).forEach(function (k) { if (!(k in o) || o[k] === '') o[k] = ex[k]; }); } catch (e) {} }
+      delete o.extra;
       return o;
     });
 }
@@ -160,9 +168,15 @@ function writeTable(kind, list) {
   const last = sh.getLastRow();
   if (last >= 2) sh.getRange(2, 1, last - 1, n).clearContent();
   if (!list.length) return;
+  const known = def.cols.map(function (c) { return c[0]; }).concat(['clientName', 'amount']);
   const rows = list.map(function (o) {
+    const ex = {};
+    Object.keys(o).forEach(function (k) { if (known.indexOf(k) < 0) ex[k] = o[k]; });
     return def.cols.map(function (c) {
-      const v = o[c[0]];
+      if (c[0] === 'extra') return Object.keys(ex).length ? JSON.stringify(ex) : '';
+      let v = o[c[0]];
+      const lab = def.labels && def.labels[c[0]];
+      if (lab && lab[v]) v = lab[v];
       if (NUM_KEYS.indexOf(c[0]) >= 0) return num(v);
       return v === null || v === undefined ? '' : String(v);
     });

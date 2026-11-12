@@ -46,6 +46,15 @@ function toast(msg) {
 const clientById = (id) => db.clients.find((c) => c.id === id);
 const clientName = (id) => clientById(id)?.name || '（削除された応援先）';
 
+// 種類：out＝応援に行った（請求する）／in＝応援に来てもらった（支払う）
+// スクリプトが古くても区別できるよう、来てもらった記録はIDの先頭を in_ にしている
+const dirOf = (r) => (r.dir === 'in' || (r.dir !== 'out' && String(r.id || '').startsWith('in_')) ? 'in' : 'out');
+const DIR = {
+  out: { name: '行った', long: '応援に行った', partner: '応援先', done: '請求済' },
+  in: { name: '来てもらった', long: '応援に来てもらった', partner: '来てくれた会社', done: '支払済' },
+};
+const dirBadge = (r) => `<span class="dir dir-${dirOf(r)}">${DIR[dirOf(r)].name}</span>`;
+
 function amountOf(r) {
   return num(r.workers) * num(r.unitPrice) + num(r.otHours) * num(r.otRate) + num(r.expense);
 }
@@ -69,6 +78,7 @@ function showTab(name) {
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + name));
   if (name === 'list') renderList();
   if (name === 'invoice') renderInvoice();
+  if (name === 'pay') renderPay();
   if (name === 'entry') renderRecent();
   window.scrollTo(0, 0);
 }
@@ -83,6 +93,7 @@ function refreshSelects() {
   fillClientSelect($('#entry-form').clientId, false);
   fillClientSelect($('#list-client'), true);
   fillClientSelect($('#inv-client'), false);
+  fillClientSelect($('#pay-client'), false);
   const sites = [...new Set(db.records.map((r) => r.site).filter(Boolean))];
   $('#site-list').innerHTML = sites.map((s) => `<option value="${esc(s)}">`).join('');
 }
@@ -92,11 +103,13 @@ const ef = $('#entry-form');
 let entryDirty = false; // 入力途中かどうか（同期で上書きしないため）
 function resetEntry() {
   entryDirty = false;
+  const dir = ef.dir.value || 'out';
   ef.reset();
   ef.id.value = '';
   ef.date.value = today();
-  const last = db.records[db.records.length - 1];
-  if (last && clientById(last.clientId)) ef.clientId.value = last.clientId;
+  setEntryDir(dir, false);
+  const last = [...db.records].reverse().find((r) => dirOf(r) === dir && clientById(r.clientId));
+  if (last) ef.clientId.value = last.clientId;
   applyClientDefaults();
   $('#entry-title').textContent = '応援記録の入力';
   $('#entry-cancel').classList.add('hidden');
@@ -104,9 +117,19 @@ function resetEntry() {
 }
 function applyClientDefaults() {
   const c = clientById(ef.clientId.value);
-  ef.unitPrice.value = c ? c.unitPrice || 0 : 0;
-  ef.otRate.value = c ? c.otRate || 0 : 0;
+  // 来てもらった時は、その会社に前回払った単価を使う（なければ標準単価）
+  const prev = ef.dir.value === 'in' ? [...db.records].reverse().find((r) => dirOf(r) === 'in' && r.clientId === ef.clientId.value) : null;
+  ef.unitPrice.value = prev ? prev.unitPrice : c ? c.unitPrice || 0 : 0;
+  ef.otRate.value = prev ? prev.otRate : c ? c.otRate || 0 : 0;
 }
+function setEntryDir(dir, applyDefaults = true) {
+  ef.dir.value = dir;
+  document.querySelectorAll('#dir-switch button').forEach((b) => b.classList.toggle('on', b.dataset.dir === dir));
+  $('#entry-partner-label').firstChild.textContent = DIR[dir].partner;
+  $('#tab-entry').dataset.dir = dir;
+  if (applyDefaults && !ef.id.value) { applyClientDefaults(); updateEntryAmount(); }
+}
+$('#dir-switch').addEventListener('click', (e) => { const d = e.target.closest('button')?.dataset.dir; if (d) setEntryDir(d); });
 function updateEntryAmount() {
   $('#entry-amount').textContent = yen(amountOf(Object.fromEntries(new FormData(ef))));
 }
@@ -114,16 +137,25 @@ ef.clientId.addEventListener('change', () => { if (!ef.id.value) applyClientDefa
 ef.addEventListener('input', () => { entryDirty = true; updateEntryAmount(); });
 ef.addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!db.clients.length) { alert('先に「設定」で応援先を登録してください'); showTab('settings'); return; }
+  if (!db.clients.length) { alert('先に「設定」で取引先を登録してください'); showTab('settings'); return; }
   const f = Object.fromEntries(new FormData(ef));
+  const dir = f.dir === 'in' ? 'in' : 'out';
   const rec = {
-    id: f.id || uid(), date: f.date, clientId: f.clientId, site: f.site.trim(), work: f.work.trim(),
+    id: f.id || (dir === 'in' ? 'in_' : '') + uid(), dir, date: f.date, clientId: f.clientId, site: f.site.trim(), work: f.work.trim(),
     workers: num(f.workers), unitPrice: num(f.unitPrice), otHours: num(f.otHours), otRate: num(f.otRate),
     expense: num(f.expense), expenseNote: f.expenseNote.trim(), members: f.members.trim(), note: f.note.trim(),
   };
-  const i = db.records.findIndex((r) => r.id === rec.id);
-  if (i >= 0) { rec.billed = db.records[i].billed; db.records[i] = rec; } else db.records.push(rec);
-  commit([{ op: 'upsertRecord', data: rec }]); refreshSelects();
+  let i = db.records.findIndex((r) => r.id === rec.id);
+  const ops = [];
+  if (i >= 0 && dirOf(db.records[i]) !== dir) {
+    // 種類を変えた時は、IDを付け直す（古いスクリプトでも区別できるように）
+    ops.push({ op: 'deleteRecord', id: rec.id });
+    db.records.splice(i, 1);
+    rec.id = (dir === 'in' ? 'in_' : '') + uid();
+    db.records.push(rec);
+  } else if (i >= 0) { rec.billed = db.records[i].billed; db.records[i] = rec; } else db.records.push(rec);
+  ops.push({ op: 'upsertRecord', data: rec });
+  commit(ops); refreshSelects();
   toast(i >= 0 ? '更新しました' : '保存しました');
   const wasEdit = i >= 0;
   resetEntry(); renderRecent();
@@ -134,6 +166,7 @@ $('#entry-cancel').addEventListener('click', () => { resetEntry(); showTab('list
 function editRecord(id) {
   const r = db.records.find((x) => x.id === id); if (!r) return;
   showTab('entry');
+  setEntryDir(dirOf(r), false);
   for (const k of ['id', 'date', 'clientId', 'site', 'work', 'workers', 'unitPrice', 'otHours', 'otRate', 'expense', 'expenseNote', 'members', 'note']) {
     ef[k].value = r[k] ?? '';
   }
@@ -159,7 +192,7 @@ function renderRecent() {
   const rs = [...db.records].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   $('#recent').innerHTML = rs.length ? rs.map((r) => `
     <div class="card"><div class="row">
-      <div><strong>${jpDate(r.date, true)}</strong> ${esc(clientName(r.clientId))}
+      <div>${dirBadge(r)} <strong>${jpDate(r.date, true)}</strong> ${esc(clientName(r.clientId))}
         <div class="sub">${esc(r.site)} ${esc(r.work)} ／ ${r.workers}人工</div></div>
       <div>${yen(amountOf(r))}円 <button class="small" data-copy="${r.id}">コピー</button></div>
     </div></div>`).join('') : '<p class="empty">まだ記録がありません</p>';
@@ -168,26 +201,34 @@ $('#recent').addEventListener('click', (e) => { const id = e.target.dataset.copy
 
 // ===== 一覧 =====
 function listRecords() {
-  const m = $('#list-month').value, c = $('#list-client').value;
-  return db.records.filter((r) => (!m || r.date.startsWith(m)) && (!c || r.clientId === c))
+  const m = $('#list-month').value, c = $('#list-client').value, d = $('#list-dir').value;
+  return db.records.filter((r) => (!m || r.date.startsWith(m)) && (!c || r.clientId === c) && (!d || dirOf(r) === d))
     .sort((a, b) => a.date.localeCompare(b.date) || clientName(a.clientId).localeCompare(clientName(b.clientId)));
 }
 function renderList() {
   const rs = listRecords();
-  const byClient = {};
-  rs.forEach((r) => {
-    const k = clientName(r.clientId);
-    byClient[k] = byClient[k] || { days: new Set(), workers: 0, amount: 0 };
-    byClient[k].days.add(r.date); byClient[k].workers += num(r.workers); byClient[k].amount += amountOf(r);
-  });
-  const total = rs.reduce((s, r) => s + amountOf(r), 0);
+  const block = (dir) => {
+    const part = rs.filter((r) => dirOf(r) === dir);
+    if (!part.length) return '';
+    const by = {};
+    part.forEach((r) => {
+      const k = clientName(r.clientId);
+      by[k] = by[k] || { days: new Set(), workers: 0, amount: 0 };
+      by[k].days.add(r.date); by[k].workers += num(r.workers); by[k].amount += amountOf(r);
+    });
+    const tot = part.reduce((s, r) => s + amountOf(r), 0);
+    return `<div class="sum-block sum-${dir}"><div class="sum-head">${DIR[dir].long}（${dir === 'out' ? '請求する分' : '支払う分'}）</div>` +
+      Object.entries(by).map(([k, v]) => `<div>${esc(k)}：${v.days.size}日 ／ ${v.workers}人工 ／ ${yen(v.amount)}円</div>`).join('') +
+      `<div><strong>小計：${yen(tot)}円（税抜）</strong></div></div>`;
+  };
+  const outT = rs.filter((r) => dirOf(r) === 'out').reduce((s, r) => s + amountOf(r), 0);
+  const inT = rs.filter((r) => dirOf(r) === 'in').reduce((s, r) => s + amountOf(r), 0);
   $('#list-summary').innerHTML = rs.length
-    ? Object.entries(byClient).map(([k, v]) => `<div>${esc(k)}：${v.days.size}日 ／ ${v.workers}人工 ／ ${yen(v.amount)}円（税抜）</div>`).join('') +
-      `<div><strong>合計：${yen(total)}円（税抜）</strong></div>`
+    ? block('out') + block('in') + (outT && inT ? `<div class="sum-net">差し引き（請求 − 支払）：<strong>${yen(outT - inT)}円</strong>（税抜）</div>` : '')
     : '該当する記録はありません';
-  $('#list-table').innerHTML = `<thead><tr><th>日付</th><th>応援先</th><th>現場・作業</th><th class="num">人工</th><th class="num">単価</th><th class="num">残業</th><th class="num">経費</th><th class="num">金額</th><th></th></tr></thead><tbody>` +
+  $('#list-table').innerHTML = `<thead><tr><th>日付</th><th>取引先</th><th>現場・作業</th><th class="num">人工</th><th class="num">単価</th><th class="num">残業</th><th class="num">経費</th><th class="num">金額</th><th></th></tr></thead><tbody>` +
     rs.map((r) => `<tr>
-      <td>${jpDate(r.date, true)}${r.billed ? '<br><span class="badge">請求済</span>' : ''}</td>
+      <td>${dirBadge(r)}<br>${jpDate(r.date, true)}${r.billed ? `<br><span class="badge">${DIR[dirOf(r)].done}</span>` : ''}</td>
       <td>${esc(clientName(r.clientId))}</td>
       <td>${esc(r.site)}<br>${esc(r.work)}${r.members ? `<br><small>${esc(r.members)}</small>` : ''}${r.note ? `<br><small>${esc(r.note)}</small>` : ''}</td>
       <td class="num">${r.workers}</td><td class="num">${yen(r.unitPrice)}</td>
@@ -198,14 +239,15 @@ function renderList() {
 }
 $('#list-month').addEventListener('change', renderList);
 $('#list-client').addEventListener('change', renderList);
+$('#list-dir').addEventListener('change', renderList);
 $('#list-table').addEventListener('click', (e) => {
   if (e.target.dataset.edit) editRecord(e.target.dataset.edit);
   if (e.target.dataset.del) deleteRecord(e.target.dataset.del);
 });
 $('#list-csv').addEventListener('click', () => {
   const rs = listRecords();
-  const head = ['日付', '応援先', '現場名', '作業内容', '人工', '単価', '残業時間', '残業単価', '経費', '経費内容', '金額(税抜)', '作業員', '備考', '請求番号'];
-  const rows = rs.map((r) => [r.date, clientName(r.clientId), r.site, r.work, r.workers, r.unitPrice, r.otHours, r.otRate, r.expense, r.expenseNote, amountOf(r), r.members, r.note, r.billed || '']);
+  const head = ['種類', '日付', '取引先', '現場名', '作業内容', '人工', '単価', '残業時間', '残業単価', '経費', '経費内容', '金額(税抜)', '作業員', '備考', '請求・支払'];
+  const rows = rs.map((r) => [DIR[dirOf(r)].long, r.date, clientName(r.clientId), r.site, r.work, r.workers, r.unitPrice, r.otHours, r.otRate, r.expense, r.expenseNote, amountOf(r), r.members, r.note, r.billed || '']);
   const csv = [head, ...rows].map((row) => row.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
   download(`応援記録_${$('#list-month').value || '全期間'}.csv`, '﻿' + csv, 'text/csv');
 });
@@ -215,7 +257,7 @@ function invoiceRecords() {
   const c = clientById($('#inv-client').value);
   if (!c) return { c: null, rs: [], p: null };
   const p = periodOf($('#inv-month').value || thisMonth(), c.closing);
-  const rs = db.records.filter((r) => r.clientId === c.id && r.date >= p.from && r.date <= p.to)
+  const rs = db.records.filter((r) => dirOf(r) === 'out' && r.clientId === c.id && r.date >= p.from && r.date <= p.to)
     .sort((a, b) => a.date.localeCompare(b.date));
   return { c, rs, p };
 }
@@ -425,6 +467,101 @@ $('#inv-mark').addEventListener('click', () => {
   commit(rs.map((r) => ({ op: 'upsertRecord', data: r }))); renderInvoice(); toast('請求済みにしました');
 });
 
+// ===== 支払（応援に来てもらった分） =====
+function payRecords() {
+  const c = clientById($('#pay-client').value);
+  if (!c) return { c: null, rs: [], p: null };
+  const p = periodOf($('#pay-month').value || thisMonth(), c.closing);
+  const rs = db.records.filter((r) => dirOf(r) === 'in' && r.clientId === c.id && r.date >= p.from && r.date <= p.to)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  return { c, rs, p };
+}
+function renderPay() {
+  const box = $('#pay-sheet');
+  if (!db.clients.length) { box.innerHTML = '<p class="empty">「設定」で取引先を登録してください</p>'; $('#pay-status').textContent = ''; return; }
+  // 来てもらった記録がある会社を先に選ぶ
+  if (!$('#pay-client').dataset.touched) {
+    const m = $('#pay-month').value || thisMonth();
+    const hit = db.records.find((r) => dirOf(r) === 'in' && r.date.startsWith(m));
+    if (hit && clientById(hit.clientId)) $('#pay-client').value = hit.clientId;
+  }
+  const { c, rs, p } = payRecords();
+  const co = db.company, rate = num(co.taxRate);
+  const lines = [];
+  rs.forEach((r) => {
+    const site = r.site ? `${r.site}　` : '';
+    const who = r.members ? `（${r.members}）` : '';
+    if (num(r.workers)) lines.push({ date: r.date, desc: `${site}${r.work}${who}`, qty: r.workers, unit: '人工', price: r.unitPrice, amt: num(r.workers) * num(r.unitPrice) });
+    if (num(r.otHours)) lines.push({ date: r.date, desc: `${site}残業`, qty: r.otHours, unit: '時間', price: r.otRate, amt: num(r.otHours) * num(r.otRate) });
+    if (num(r.expense)) lines.push({ date: r.date, desc: `${site}${r.expenseNote || '経費'}`, qty: 1, unit: '式', price: r.expense, amt: num(r.expense) });
+  });
+  const sub = lines.reduce((t, l) => t + l.amt, 0), tax = roundTax(sub * rate / 100), total = sub + tax;
+  const paid = rs.filter((r) => r.billed).length;
+  const days = new Set(rs.map((r) => r.date)).size, workers = rs.reduce((t, r) => t + num(r.workers), 0);
+  $('#pay-status').innerHTML = `対象期間：${jpFullDate(p.from)} 〜 ${jpFullDate(p.to)}（${Number(c.closing) ? c.closing + '日締め' : '末締め'}）／ ${rs.length}件` +
+    (rs.length ? `　<span class="badge${paid === rs.length ? '' : ' todo'}">${paid === rs.length ? '支払済' : paid ? `一部支払済（${paid}/${rs.length}件）` : '未払い'}</span>` : '');
+  $('#pay-mark').textContent = rs.length && paid === rs.length ? '「未払い」に戻す' : 'この期間を「支払済」にする';
+  const blank = Math.max(0, 12 - lines.length);
+  box.className = 'invoice inv-standard';
+  box.innerHTML = `
+    <div class="a-top">
+      <h1 style="letter-spacing:.2em">支払明細書</h1>
+      <table class="a-meta"><tr><th>作成日</th><td>${jpFullDate(today())}</td></tr><tr><th>対象月</th><td>${Number(($('#pay-month').value || thisMonth()).slice(5))}月分</td></tr></table>
+    </div>
+    <div class="a-parties">
+      <div class="a-to">
+        <div class="a-toname">${esc(c.name)}<span>${esc(c.honor || '御中')}</span></div>
+        ${c.address ? `<div class="a-small">${esc(c.address)}</div>` : ''}
+        <p>このたびは応援をいただきありがとうございました。<br>下記の通りお支払いいたします。</p>
+        <dl class="a-dl"><dt>件名</dt><dd>${Number(($('#pay-month').value || thisMonth()).slice(5))}月分 型枠工事 応援（受入）</dd><dt>期間</dt><dd>${jpFullDate(p.from)} 〜 ${jpFullDate(p.to)}</dd><dt>実績</dt><dd>${days}日・延べ ${workers} 人工</dd></dl>
+      </div>
+      <div class="a-from">
+        <div class="a-fromname">${esc(co.name || '（設定で自社名を入力）')}</div>
+        ${co.rep ? `<div>${esc(co.rep)}</div>` : ''}
+        ${fromLines(co)}
+        ${sealHtml(co)}
+      </div>
+    </div>
+    <div class="a-total"><span>お支払金額（税込）</span><strong>¥${yen(total)}</strong></div>
+    <table class="a-lines">
+      <thead><tr><th class="w-date">日付</th><th>内容</th><th class="w-qty">数量</th><th class="w-unit">単位</th><th class="w-price">単価</th><th class="w-amt">金額</th></tr></thead>
+      <tbody>
+        ${lines.map((l) => `<tr><td>${jpDate(l.date, true)}</td><td>${esc(l.desc)}</td><td class="num">${l.qty}</td><td class="c">${l.unit}</td><td class="num">${yen(l.price)}</td><td class="num">${yen(l.amt)}</td></tr>`).join('')}
+        ${'<tr class="blank"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(blank)}
+      </tbody>
+    </table>
+    <div class="a-bottom">
+      <div class="a-bank">${c.payTerms ? `<div class="a-label">お支払条件</div><div>${esc(c.payTerms)}</div>` : ''}</div>
+      <table class="a-sum">
+        <tr><th>小計（${rate}%対象）</th><td>¥${yen(sub)}</td></tr>
+        <tr><th>消費税（${rate}%）</th><td>¥${yen(tax)}</td></tr>
+        <tr class="grand"><th>合計</th><td>¥${yen(total)}</td></tr>
+      </table>
+    </div>
+    <p class="a-note">貴社よりいただくご請求書と金額が異なる場合は、お手数ですがご連絡ください。</p>`;
+}
+['#pay-month', '#pay-client'].forEach((sel) => $(sel).addEventListener('change', (e) => { if (e.target.id === 'pay-client') e.target.dataset.touched = '1'; renderPay(); }));
+$('#pay-print').addEventListener('click', () => {
+  const { c, p } = payRecords();
+  const old = document.title;
+  if (c) document.title = `支払明細書_${c.name}_${p.to.slice(0, 7)}`;
+  window.print();
+  document.title = old;
+});
+$('#pay-mark').addEventListener('click', () => {
+  const { rs } = payRecords();
+  if (!rs.length) { toast('対象の記録がありません'); return; }
+  const allPaid = rs.every((r) => r.billed);
+  if (allPaid) {
+    if (!confirm(`${rs.length}件の記録を「未払い」に戻しますか？`)) return;
+    rs.forEach((r) => { r.billed = ''; });
+  } else {
+    if (!confirm(`${rs.length}件の記録を「支払済」にしますか？`)) return;
+    rs.forEach((r) => { r.billed = `支払済 ${today()}`; });
+  }
+  commit(rs.map((r) => ({ op: 'upsertRecord', data: r }))); renderPay(); toast(allPaid ? '未払いに戻しました' : '支払済にしました');
+});
+
 // ===== 設定 =====
 const cf = $('#company-form');
 function fillCompany() {
@@ -621,6 +758,7 @@ function init() {
   refreshSelects(); fillCompany(); renderClients(); resetEntry(); renderRecent();
   $('#list-month').value = thisMonth();
   $('#inv-month').value = thisMonth();
+  $('#pay-month').value = thisMonth();
   $('#inv-no').value = '';
   showTab(!db.clients.length && !syncOn() ? 'settings' : 'entry');
 }
@@ -632,6 +770,7 @@ function rerenderAll() {
   if (!ef.id.value && !entryDirty) resetEntry();
   if ($('#tab-list').classList.contains('active')) renderList();
   if ($('#tab-invoice').classList.contains('active')) renderInvoice();
+  if ($('#tab-pay').classList.contains('active')) renderPay();
 }
 
 // ===== Googleスプレッドシート連携 =====

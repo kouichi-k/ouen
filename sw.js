@@ -1,5 +1,5 @@
 // オフラインでも開けるようにアプリのファイルを保存しておく
-const CACHE = 'ouen-v8';
+const CACHE = 'ouen-v9';
 const FILES = ['./', './index.html', './style.css', './app.js', './gas/Code.gs', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {

@@ -22,6 +22,7 @@
     <button data-tab="entry" class="active">記録入力</button>
     <button data-tab="list">一覧</button>
     <button data-tab="invoice">請求書</button>
+    <button data-tab="pay">支払</button>
     <button data-tab="settings">設定</button>
   </nav>
 </header>
@@ -32,9 +33,14 @@
     <h2 id="entry-title">応援記録の入力</h2>
     <form id="entry-form" autocomplete="off">
       <input type="hidden" name="id">
+      <input type="hidden" name="dir" value="out">
+      <div id="dir-switch" class="dir-switch" role="group" aria-label="記録の種類">
+        <button type="button" data-dir="out" class="on">応援に<b>行った</b><small>請求する</small></button>
+        <button type="button" data-dir="in">応援に<b>来てもらった</b><small>支払う</small></button>
+      </div>
       <div class="grid">
         <label>日付<input type="date" name="date" required></label>
-        <label>応援先<select name="clientId" required></select></label>
+        <label id="entry-partner-label">応援先<select name="clientId" required></select></label>
         <label class="wide">現場名<input type="text" name="site" list="site-list" placeholder="例：〇〇マンション新築工事"></label>
         <label class="wide">作業内容<input type="text" name="work" list="work-list" placeholder="例：型枠組立" required></label>
         <label>人数（人工）<input type="number" name="workers" step="0.5" min="0" value="1" required></label>
@@ -66,7 +72,8 @@
     <h2>応援記録の一覧</h2>
     <div class="filters">
       <label>月<input type="month" id="list-month"></label>
-      <label>応援先<select id="list-client"></select></label>
+      <label>種類<select id="list-dir"><option value="">すべて</option><option value="out">応援に行った</option><option value="in">来てもらった</option></select></label>
+      <label>取引先<select id="list-client"></select></label>
       <button id="list-csv">CSV出力</button>
     </div>
     <div id="list-summary" class="summary"></div>
@@ -91,6 +98,24 @@
       </div>
     </div>
     <div class="invoice-wrap"><div id="invoice" class="invoice"></div></div>
+  </section>
+
+  <!-- 支払（来てもらった分） -->
+  <section id="tab-pay" class="tab">
+    <div class="no-print">
+      <h2>支払の確認（応援に来てもらった分）</h2>
+      <div class="filters">
+        <label>対象月<input type="month" id="pay-month"></label>
+        <label>支払先<select id="pay-client"></select></label>
+      </div>
+      <p class="hint" id="pay-status"></p>
+      <p class="hint">相手から届いた請求書と金額が合っているか確認できます。支払明細書として印刷・PDFにして相手に渡すこともできます。</p>
+      <div class="actions">
+        <button id="pay-print" class="primary">印刷 / PDF保存</button>
+        <button id="pay-mark">この期間を「支払済」にする</button>
+      </div>
+    </div>
+    <div class="invoice-wrap"><div id="pay-sheet" class="invoice"></div></div>
   </section>
 
   <!-- 設定 -->
@@ -165,7 +190,7 @@
       <div class="actions wide"><button type="submit" class="primary">自社情報を保存</button></div>
     </form>
 
-    <h2>応援先（取引先）</h2>
+    <h2>取引先（応援に行く先・来てくれる会社）</h2>
     <form id="client-form" class="grid" autocomplete="off">
       <input type="hidden" name="id">
       <label class="wide">会社名<input name="name" required placeholder="例：株式会社△△建設"></label>
@@ -173,12 +198,12 @@
       <label>締め日<select name="closing">
         <option value="0">末日</option><option value="5">5日</option><option value="10">10日</option><option value="15">15日</option><option value="20">20日</option><option value="25">25日</option>
       </select></label>
-      <label>標準単価（円/人工）<input type="number" name="unitPrice" min="0" value="0"></label>
+      <label>標準単価（円/人工）<input type="number" name="unitPrice" min="0" value="0" title="来てもらった時は、前回その会社に払った単価が自動で入ります"></label>
       <label>標準残業単価（円/時間）<input type="number" name="otRate" min="0" value="0"></label>
       <label>支払条件<input name="payTerms" placeholder="例：翌月末払い"></label>
       <label class="wide">住所<input name="address"></label>
       <div class="actions wide">
-        <button type="submit" class="primary">応援先を保存</button>
+        <button type="submit" class="primary">取引先を保存</button>
         <button type="button" id="client-cancel" class="hidden">編集をやめる</button>
       </div>
     </form>
@@ -190,7 +215,7 @@
       <button id="backup">バックアップを保存</button>
       <label class="filebtn">バックアップから復元<input type="file" id="restore" accept="application/json"></label>
     </div>
-    <p class="hint version">アプリのバージョン：2026.11.12-3（スマホとパソコンで同じなら最新です）</p>
+    <p class="hint version">アプリのバージョン：2026.11.12-4（スマホとパソコンで同じなら最新です）</p>
   </section>
 </main>
 <div id="toast" class="no-print"></div>
