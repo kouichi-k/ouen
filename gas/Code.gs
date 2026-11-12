@@ -32,7 +32,7 @@ const SHEETS = {
 const COMPANY_SHEET = '自社情報';
 const COMPANY_LABELS = {
   name: '会社名', rep: '代表者', regNo: '登録番号', zip: '郵便番号', address: '住所', tel: '電話', fax: 'FAX',
-  bank: '振込先', taxRate: '消費税率(%)', rounding: '端数処理',
+  bank: '振込先', taxRate: '消費税率(%)', rounding: '端数処理', invoiceStyle: '請求書デザイン',
 };
 const NUM_KEYS = ['workers', 'unitPrice', 'otHours', 'otRate', 'expense', 'amount'];
 

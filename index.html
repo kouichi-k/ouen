@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>応援管理・請求書</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -79,6 +82,7 @@
         <label>請求先<select id="inv-client"></select></label>
         <label>請求日<input type="date" id="inv-date"></label>
         <label>請求番号<input type="text" id="inv-no"></label>
+        <label>デザイン<select id="inv-style"></select></label>
       </div>
       <p class="hint" id="inv-period"></p>
       <div class="actions">
@@ -86,7 +90,7 @@
         <button id="inv-mark">この期間を「請求済み」にする</button>
       </div>
     </div>
-    <div id="invoice" class="invoice"></div>
+    <div class="invoice-wrap"><div id="invoice" class="invoice"></div></div>
   </section>
 
   <!-- 設定 -->

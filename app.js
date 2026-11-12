@@ -251,46 +251,154 @@ function renderInvoice() {
   const total = sub + tax;
   const workers = rs.reduce((s, r) => s + num(r.workers), 0);
   const days = new Set(rs.map((r) => r.date)).size;
-  const minRows = 15;
-  const blank = Math.max(0, minRows - lines.length);
 
-  box.innerHTML = `
-    <h1>請求書</h1>
-    <div class="inv-meta">請求番号：${esc($('#inv-no').value)}<br>請求日：${jpFullDate($('#inv-date').value)}</div>
-    <div class="inv-head">
-      <div class="inv-to">
-        <div class="name">${esc(c.name)}　${esc(c.honor || '御中')}</div>
-        ${c.address ? `<div>${esc(c.address)}</div>` : ''}
-        <p>下記の通りご請求申し上げます。</p>
-        <div>件名：${Number($('#inv-month').value.slice(5))}月分 型枠工事 応援</div>
-        <div>期間：${jpFullDate(p.from)} 〜 ${jpFullDate(p.to)}（${days}日・延べ${workers}人工）</div>
-        <div class="inv-total"><span>ご請求金額（税込）</span><span><strong>¥${yen(total)}-</strong></span></div>
-      </div>
-      <div class="inv-from">
-        <div class="name">${esc(co.name || '（設定で自社名を入力）')}</div>
-        ${co.rep ? `<div>${esc(co.rep)}</div>` : ''}
-        ${co.zip ? `<div>〒${esc(co.zip)}</div>` : ''}
-        ${co.address ? `<div>${esc(co.address)}</div>` : ''}
-        ${co.tel ? `<div>TEL ${esc(co.tel)}</div>` : ''}
-        ${co.fax ? `<div>FAX ${esc(co.fax)}</div>` : ''}
-        ${co.regNo ? `<div>登録番号 ${esc(co.regNo)}</div>` : ''}
-      </div>
-    </div>
-    <table>
-      <thead><tr><th style="width:12%">日付</th><th>内容</th><th style="width:9%">数量</th><th style="width:7%">単位</th><th style="width:13%">単価</th><th style="width:15%">金額</th></tr></thead>
-      <tbody>
-        ${lines.map((l) => `<tr><td>${jpDate(l.date, true)}</td><td>${esc(l.desc)}</td><td class="num">${l.qty}</td><td>${l.unit}</td><td class="num">${yen(l.price)}</td><td class="num">${yen(l.amt)}</td></tr>`).join('')}
-        ${'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(blank)}
-      </tbody>
-    </table>
-    <table class="inv-sum">
-      <tr><td>小計（${rate}%対象）</td><td class="num">${yen(sub)}</td></tr>
-      <tr><td>消費税（${rate}%）</td><td class="num">${yen(tax)}</td></tr>
-      <tr><td><strong>合計</strong></td><td class="num"><strong>${yen(total)}</strong></td></tr>
-    </table>
-    <div class="inv-bottom">${c.payTerms ? `お支払条件：${esc(c.payTerms)}\n` : ''}${co.bank ? `お振込先：\n${esc(co.bank)}\n恐れ入りますが、振込手数料は貴社にてご負担願います。` : ''}</div>
-  `;
+  const style = INVOICE_STYLES[co.invoiceStyle] ? co.invoiceStyle : 'standard';
+  $('#inv-style').value = style;
+  const d = {
+    c, co, p, lines, sub, tax, total, rate, days, workers,
+    no: $('#inv-no').value, date: jpFullDate($('#inv-date').value),
+    subject: `${Number(($('#inv-month').value || thisMonth()).slice(5))}月分 型枠工事 応援`,
+    period: `${jpFullDate(p.from)} 〜 ${jpFullDate(p.to)}`,
+    blank: Math.max(0, 12 - lines.length),
+  };
+  box.className = 'invoice inv-' + style;
+  box.innerHTML = INVOICE_STYLES[style].render(d);
 }
+
+// ===== 請求書のデザイン（3種類） =====
+const fromLines = (co) => [
+  co.zip ? `〒${esc(co.zip)}` : '', esc(co.address || ''),
+  [co.tel ? `TEL ${esc(co.tel)}` : '', co.fax ? `FAX ${esc(co.fax)}` : ''].filter(Boolean).join('　'),
+  co.regNo ? `登録番号 ${esc(co.regNo)}` : '',
+].filter(Boolean).map((t) => `<div>${t}</div>`).join('');
+const lineRows = (d, cols) => d.lines.map((l) => `<tr>${cols(l)}</tr>`).join('');
+const bankText = (d) => esc(d.co.bank || '');
+
+const INVOICE_STYLES = {
+  // A：すっきりした標準的なデザイン
+  standard: {
+    label: 'A スタンダード',
+    render: (d) => `
+      <div class="a-top">
+        <h1>請求書</h1>
+        <table class="a-meta"><tr><th>請求日</th><td>${d.date}</td></tr><tr><th>請求番号</th><td>${esc(d.no)}</td></tr></table>
+      </div>
+      <div class="a-parties">
+        <div class="a-to">
+          <div class="a-toname">${esc(d.c.name)}<span>${esc(d.c.honor || '御中')}</span></div>
+          ${d.c.address ? `<div class="a-small">${esc(d.c.address)}</div>` : ''}
+          <p>下記の通りご請求申し上げます。</p>
+          <dl class="a-dl"><dt>件名</dt><dd>${d.subject}</dd><dt>期間</dt><dd>${d.period}</dd><dt>実績</dt><dd>${d.days}日・延べ ${d.workers} 人工</dd></dl>
+        </div>
+        <div class="a-from">
+          <div class="a-fromname">${esc(d.co.name || '（設定で自社名を入力）')}</div>
+          ${d.co.rep ? `<div>${esc(d.co.rep)}</div>` : ''}
+          ${fromLines(d.co)}
+          <div class="a-seal">印</div>
+        </div>
+      </div>
+      <div class="a-total"><span>ご請求金額（税込）</span><strong>¥${yen(d.total)}</strong></div>
+      <table class="a-lines">
+        <thead><tr><th class="w-date">日付</th><th>内容</th><th class="w-qty">数量</th><th class="w-unit">単位</th><th class="w-price">単価</th><th class="w-amt">金額</th></tr></thead>
+        <tbody>
+          ${lineRows(d, (l) => `<td>${jpDate(l.date, true)}</td><td>${esc(l.desc)}</td><td class="num">${l.qty}</td><td class="c">${l.unit}</td><td class="num">${yen(l.price)}</td><td class="num">${yen(l.amt)}</td>`)}
+          ${'<tr class="blank"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(d.blank)}
+        </tbody>
+      </table>
+      <div class="a-bottom">
+        <div class="a-bank">${d.co.bank ? `<div class="a-label">お振込先</div><div class="pre">${bankText(d)}</div>` : ''}${d.c.payTerms ? `<div class="a-label">お支払条件</div><div>${esc(d.c.payTerms)}</div>` : ''}</div>
+        <table class="a-sum">
+          <tr><th>小計（${d.rate}%対象）</th><td>¥${yen(d.sub)}</td></tr>
+          <tr><th>消費税（${d.rate}%）</th><td>¥${yen(d.tax)}</td></tr>
+          <tr class="grand"><th>合計</th><td>¥${yen(d.total)}</td></tr>
+        </table>
+      </div>
+      <p class="a-note">恐れ入りますが、振込手数料は貴社にてご負担くださいますようお願い申し上げます。</p>`,
+  },
+
+  // B：色を使った見やすいデザイン
+  modern: {
+    label: 'B モダン',
+    render: (d) => `
+      <div class="b-band">
+        <div><div class="b-en">INVOICE</div><h1>請求書</h1></div>
+        <div class="b-meta"><div><span>請求日</span>${d.date}</div><div><span>請求番号</span>${esc(d.no)}</div></div>
+      </div>
+      <div class="b-cards">
+        <div class="b-card">
+          <div class="b-label">ご請求先</div>
+          <div class="b-toname">${esc(d.c.name)} ${esc(d.c.honor || '御中')}</div>
+          ${d.c.address ? `<div class="b-small">${esc(d.c.address)}</div>` : ''}
+          <div class="b-subject">${d.subject}</div>
+          <div class="b-small">${d.period}　${d.days}日・延べ ${d.workers} 人工</div>
+        </div>
+        <div class="b-card b-fromcard">
+          <div class="b-label">ご請求元</div>
+          <div class="b-fromname">${esc(d.co.name || '（設定で自社名を入力）')}</div>
+          ${d.co.rep ? `<div class="b-small">${esc(d.co.rep)}</div>` : ''}
+          <div class="b-small">${fromLines(d.co)}</div>
+        </div>
+      </div>
+      <div class="b-total">
+        <div><div class="b-label light">ご請求金額（税込）</div><div class="b-amount">¥${yen(d.total)}</div></div>
+        <div class="b-breakdown"><div>小計 ¥${yen(d.sub)}</div><div>消費税 ¥${yen(d.tax)}</div></div>
+      </div>
+      <table class="b-lines">
+        <thead><tr><th class="w-date">日付</th><th>内容</th><th class="w-qty num">数量</th><th class="w-price num">単価</th><th class="w-amt num">金額</th></tr></thead>
+        <tbody>${lineRows(d, (l) => `<td>${jpDate(l.date, true)}</td><td>${esc(l.desc)}</td><td class="num">${l.qty}<small>${l.unit}</small></td><td class="num">${yen(l.price)}</td><td class="num">${yen(l.amt)}</td>`)}</tbody>
+      </table>
+      <div class="b-sumwrap"><table class="b-sum">
+        <tr><th>小計（${d.rate}%対象）</th><td>¥${yen(d.sub)}</td></tr>
+        <tr><th>消費税（${d.rate}%）</th><td>¥${yen(d.tax)}</td></tr>
+        <tr class="grand"><th>合計</th><td>¥${yen(d.total)}</td></tr>
+      </table></div>
+      <div class="b-foot">
+        ${d.co.bank ? `<div><div class="b-label">お振込先</div><div class="pre">${bankText(d)}</div></div>` : ''}
+        <div>${d.c.payTerms ? `<div class="b-label">お支払条件</div><div>${esc(d.c.payTerms)}</div>` : ''}<div class="b-small">振込手数料は貴社にてご負担願います。</div></div>
+      </div>`,
+  },
+
+  // C：明朝体・罫線の伝統的なデザイン
+  classic: {
+    label: 'C 和風・伝統',
+    render: (d) => `
+      <div class="c-meta">No. ${esc(d.no)}<br>${d.date}</div>
+      <h1>御 請 求 書</h1>
+      <div class="c-parties">
+        <div class="c-to">
+          <div class="c-toname">${esc(d.c.name)}　${esc(d.c.honor || '御中')}</div>
+          <p>毎度格別のお引き立てを賜り厚く御礼申し上げます。<br>下記の通り御請求申し上げます。</p>
+          <table class="c-info"><tr><th>件　名</th><td>${d.subject}</td></tr><tr><th>期　間</th><td>${d.period}</td></tr><tr><th>実　績</th><td>${d.days}日　延べ ${d.workers} 人工</td></tr></table>
+        </div>
+        <div class="c-from">
+          <div class="c-fromname">${esc(d.co.name || '（設定で自社名を入力）')}</div>
+          ${d.co.rep ? `<div>${esc(d.co.rep)}</div>` : ''}
+          ${fromLines(d.co)}
+          <table class="c-stamps"><tr><th>担当</th><th>確認</th></tr><tr><td></td><td></td></tr></table>
+        </div>
+      </div>
+      <div class="c-total"><span>御請求金額</span><strong>金 ${yen(d.total)} 円也</strong><small>（消費税込）</small></div>
+      <table class="c-lines">
+        <thead><tr><th class="w-date">月日</th><th>摘　要</th><th class="w-qty">数量</th><th class="w-unit">単位</th><th class="w-price">単　価</th><th class="w-amt">金　額</th></tr></thead>
+        <tbody>
+          ${lineRows(d, (l) => `<td class="c">${jpDate(l.date)}</td><td>${esc(l.desc)}</td><td class="num">${l.qty}</td><td class="c">${l.unit}</td><td class="num">${yen(l.price)}</td><td class="num">${yen(l.amt)}</td>`)}
+          ${'<tr class="blank"><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(d.blank)}
+        </tbody>
+        <tfoot>
+          <tr><td colspan="4" rowspan="3" class="c-bank">${d.co.bank ? `【御振込先】<div class="pre">${bankText(d)}</div>` : ''}${d.c.payTerms ? `【御支払条件】${esc(d.c.payTerms)}` : ''}</td><th>小計（${d.rate}%対象）</th><td class="num">${yen(d.sub)}</td></tr>
+          <tr><th>消費税（${d.rate}%）</th><td class="num">${yen(d.tax)}</td></tr>
+          <tr class="grand"><th>合　計</th><td class="num">${yen(d.total)}</td></tr>
+        </tfoot>
+      </table>
+      <p class="c-note">※振込手数料は貴社にて御負担下さいますよう御願い申し上げます。</p>`,
+  },
+};
+$('#inv-style').innerHTML = Object.entries(INVOICE_STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
+$('#inv-style').addEventListener('change', () => {
+  db.company.invoiceStyle = $('#inv-style').value;
+  commit([{ op: 'setCompany', data: db.company }]);
+  renderInvoice();
+});
 ['#inv-month', '#inv-client'].forEach((s) => $(s).addEventListener('change', () => { setInvDefaults(); renderInvoice(); }));
 ['#inv-date', '#inv-no'].forEach((s) => $(s).addEventListener('input', renderInvoice));
 $('#inv-print').addEventListener('click', () => {
@@ -316,7 +424,7 @@ function fillCompany() {
 }
 cf.addEventListener('submit', (e) => {
   e.preventDefault();
-  db.company = Object.fromEntries(new FormData(cf));
+  db.company = Object.assign({}, db.company, Object.fromEntries(new FormData(cf)));
   commit([{ op: 'setCompany', data: db.company }]); renderInvoice(); toast('自社情報を保存しました');
 });
 

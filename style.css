@@ -43,24 +43,106 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #24292f; color: #fff; padding: 10px 18px; border-radius: 20px; opacity: 0; transition: opacity .3s; pointer-events: none; }
 #toast.show { opacity: 1; }
 
-/* 請求書 */
-.invoice { background: #fff; color: #000; border: 1px solid var(--line); margin-top: 16px; padding: 28px 32px; font-size: 13px; font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif; }
-.invoice h1 { text-align: center; letter-spacing: .6em; font-size: 26px; margin: 0 0 18px; border-bottom: 3px double #000; padding-bottom: 6px; }
-.inv-head { display: flex; justify-content: space-between; gap: 20px; }
-.inv-to .name { font-size: 18px; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 8px; }
-.inv-from { text-align: right; line-height: 1.6; }
-.inv-from .name { font-size: 16px; font-weight: bold; }
-.inv-meta { text-align: right; margin-bottom: 8px; }
-.inv-total { display: inline-flex; border: 2px solid #000; margin: 14px 0; }
-.inv-total span { padding: 8px 14px; }
-.inv-total span:first-child { background: #eee; border-right: 1px solid #000; }
-.inv-total strong { font-size: 20px; }
-.invoice table { font-size: 12px; background: #fff; }
-.invoice th, .invoice td { border: 1px solid #000; padding: 4px 6px; }
-.invoice th { background: #eee; text-align: center; }
-.inv-sum { margin-left: auto; width: 300px; margin-top: 8px; }
-.inv-sum td:first-child { background: #eee; }
-.inv-bottom { margin-top: 14px; white-space: pre-wrap; }
+/* 請求書（共通） */
+.invoice-wrap { overflow-x: auto; margin-top: 16px; border: 1px solid var(--line); background: #fff; }
+.invoice { width: 760px; min-height: 1060px; background: #fff; color: #1a1a1a; padding: 40px 44px; font-size: 12.5px; line-height: 1.55; font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif; font-variant-numeric: tabular-nums; }
+.invoice h1 { margin: 0; font-weight: 700; }
+.invoice table { border-collapse: collapse; width: 100%; background: transparent; font-size: 12px; }
+.invoice th, .invoice td { border: none; padding: 0; text-align: left; vertical-align: middle; background: none; white-space: normal; }
+.invoice .num { text-align: right; white-space: nowrap; }
+.invoice .c { text-align: center; }
+.invoice .pre { white-space: pre-wrap; }
+.invoice .w-date { width: 68px; } .invoice .w-qty { width: 56px; } .invoice .w-unit { width: 44px; }
+.invoice .w-price { width: 84px; } .invoice .w-amt { width: 100px; }
+
+/* A スタンダード */
+.inv-standard .a-top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1a1a1a; padding-bottom: 10px; }
+.inv-standard h1 { font-size: 30px; letter-spacing: .35em; }
+.inv-standard .a-meta { width: auto; }
+.inv-standard .a-meta th { color: #666; font-weight: 400; padding: 1px 12px 1px 0; }
+.inv-standard .a-meta td { text-align: right; }
+.inv-standard .a-parties { display: flex; justify-content: space-between; gap: 32px; margin-top: 24px; }
+.inv-standard .a-to { flex: 1; }
+.inv-standard .a-toname { font-size: 19px; font-weight: 700; border-bottom: 1px solid #1a1a1a; padding-bottom: 4px; }
+.inv-standard .a-toname span { font-size: 14px; font-weight: 400; margin-left: 12px; }
+.inv-standard .a-small { color: #555; font-size: 11.5px; margin-top: 4px; }
+.inv-standard .a-to p { margin: 14px 0 8px; }
+.inv-standard .a-dl { display: grid; grid-template-columns: 44px 1fr; gap: 2px 8px; margin: 0; }
+.inv-standard .a-dl dt { color: #666; } .inv-standard .a-dl dd { margin: 0; }
+.inv-standard .a-from { width: 250px; position: relative; font-size: 11.5px; color: #333; padding-top: 2px; }
+.inv-standard .a-fromname { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-bottom: 2px; }
+.inv-standard .a-seal { position: absolute; right: 0; top: 0; width: 56px; height: 56px; border: 1px dashed #bbb; color: #ccc; display: flex; align-items: center; justify-content: center; font-size: 13px; }
+.inv-standard .a-total { display: flex; justify-content: space-between; align-items: baseline; background: #f2f2f2; border-left: 5px solid #1a1a1a; padding: 12px 18px; margin: 24px 0 20px; }
+.inv-standard .a-total span { font-size: 14px; font-weight: 500; }
+.inv-standard .a-total strong { font-size: 28px; letter-spacing: .02em; }
+.inv-standard .a-lines th { background: #1a1a1a; color: #fff; font-weight: 500; padding: 7px 8px; text-align: center; }
+.inv-standard .a-lines td { padding: 6px 8px; border-bottom: 1px solid #ddd; }
+.inv-standard .a-lines tbody tr:nth-child(even) td { background: #fafafa; }
+.inv-standard .a-bottom { display: flex; justify-content: space-between; gap: 24px; margin-top: 18px; }
+.inv-standard .a-bank { flex: 1; font-size: 11.5px; }
+.inv-standard .a-label { font-weight: 700; margin-top: 4px; }
+.inv-standard .a-label + div { margin-bottom: 6px; }
+.inv-standard .a-sum { width: 270px; }
+.inv-standard .a-sum th { font-weight: 400; color: #555; padding: 5px 8px; border-bottom: 1px solid #ddd; }
+.inv-standard .a-sum td { text-align: right; padding: 5px 8px; border-bottom: 1px solid #ddd; }
+.inv-standard .a-sum .grand th, .inv-standard .a-sum .grand td { color: #1a1a1a; font-weight: 700; font-size: 15px; border-bottom: 2px solid #1a1a1a; }
+.inv-standard .a-note { color: #666; font-size: 11px; margin-top: 18px; }
+
+/* B モダン */
+.inv-modern { --b-accent: #1d3f6e; --b-soft: #eef3f9; padding-top: 0; }
+.inv-modern .b-band { display: flex; justify-content: space-between; align-items: flex-end; background: var(--b-accent); color: #fff; margin: 0 -44px; padding: 30px 44px 22px; }
+.inv-modern .b-en { font-size: 11px; letter-spacing: .4em; opacity: .75; }
+.inv-modern h1 { font-size: 28px; letter-spacing: .15em; }
+.inv-modern .b-meta { text-align: right; font-size: 12px; }
+.inv-modern .b-meta span { opacity: .7; margin-right: 10px; }
+.inv-modern .b-cards { display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-top: 24px; }
+.inv-modern .b-card { border: 1px solid #d5dde8; border-radius: 6px; padding: 14px 16px; }
+.inv-modern .b-fromcard { background: var(--b-soft); border-color: var(--b-soft); }
+.inv-modern .b-label { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; color: var(--b-accent); margin-bottom: 4px; }
+.inv-modern .b-label.light { color: #fff; opacity: .8; }
+.inv-modern .b-toname { font-size: 17px; font-weight: 700; }
+.inv-modern .b-fromname { font-size: 15px; font-weight: 700; }
+.inv-modern .b-subject { margin-top: 10px; font-weight: 500; }
+.inv-modern .b-small { font-size: 11.5px; color: #555; }
+.inv-modern .b-total { display: flex; justify-content: space-between; align-items: center; background: var(--b-accent); color: #fff; border-radius: 6px; padding: 14px 20px; margin: 18px 0 22px; }
+.inv-modern .b-amount { font-size: 30px; font-weight: 700; letter-spacing: .02em; line-height: 1.2; }
+.inv-modern .b-breakdown { text-align: right; font-size: 12px; opacity: .9; }
+.inv-modern .b-lines th { color: var(--b-accent); font-size: 11px; font-weight: 700; padding: 6px 8px; border-bottom: 2px solid var(--b-accent); }
+.inv-modern .b-lines td { padding: 7px 8px; border-bottom: 1px solid #e3e8ef; }
+.inv-modern .b-lines small { color: #777; margin-left: 2px; font-size: 10px; }
+.inv-modern .b-sumwrap { display: flex; justify-content: flex-end; margin-top: 10px; }
+.inv-modern .b-sum { width: 270px; }
+.inv-modern .b-sum th { font-weight: 400; color: #555; padding: 4px 8px; }
+.inv-modern .b-sum td { text-align: right; padding: 4px 8px; }
+.inv-modern .b-sum .grand th, .inv-modern .b-sum .grand td { background: var(--b-soft); color: var(--b-accent); font-weight: 700; font-size: 15px; padding: 8px; }
+.inv-modern .b-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 26px; padding-top: 14px; border-top: 1px solid #d5dde8; font-size: 11.5px; }
+
+/* C 和風・伝統 */
+.inv-classic { font-family: "Noto Serif JP", "Hiragino Mincho ProN", "Yu Mincho", serif; }
+.inv-classic .c-meta { text-align: right; font-size: 12px; }
+.inv-classic h1 { text-align: center; font-size: 28px; font-weight: 600; letter-spacing: .3em; margin: 4px auto 22px; width: 320px; border-bottom: 4px double #1a1a1a; padding-bottom: 4px; }
+.inv-classic .c-parties { display: flex; justify-content: space-between; gap: 28px; }
+.inv-classic .c-to { flex: 1; }
+.inv-classic .c-toname { font-size: 19px; font-weight: 700; border-bottom: 1px solid #1a1a1a; padding: 0 4px 4px; }
+.inv-classic .c-to p { font-size: 12px; margin: 12px 0; }
+.inv-classic .c-info th, .inv-classic .c-info td { border: 1px solid #1a1a1a; padding: 4px 8px; }
+.inv-classic .c-info th { width: 64px; background: #f3f1ec; font-weight: 600; text-align: center; }
+.inv-classic .c-from { width: 250px; font-size: 11.5px; }
+.inv-classic .c-fromname { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
+.inv-classic .c-stamps { width: 120px; margin: 10px 0 0 auto; }
+.inv-classic .c-stamps th, .inv-classic .c-stamps td { border: 1px solid #1a1a1a; text-align: center; font-size: 10.5px; font-weight: 400; }
+.inv-classic .c-stamps td { height: 52px; }
+.inv-classic .c-total { display: flex; align-items: baseline; gap: 18px; border: 2px solid #1a1a1a; outline: 1px solid #1a1a1a; outline-offset: 2px; padding: 10px 18px; margin: 22px 0 18px; width: 480px; }
+.inv-classic .c-total span { font-size: 14px; letter-spacing: .2em; }
+.inv-classic .c-total strong { font-size: 26px; }
+.inv-classic .c-total small { font-size: 11px; }
+.inv-classic .c-lines th, .inv-classic .c-lines td { border: 1px solid #1a1a1a; padding: 5px 7px; }
+.inv-classic .c-lines thead th { background: #f3f1ec; font-weight: 600; text-align: center; }
+.inv-classic .c-lines tbody tr td { border-top-style: dotted; border-bottom-style: dotted; }
+.inv-classic .c-lines tfoot th { background: #f3f1ec; font-weight: 600; text-align: center; white-space: nowrap; }
+.inv-classic .c-lines tfoot .grand th, .inv-classic .c-lines tfoot .grand td { font-size: 14px; font-weight: 700; border-top: 3px double #1a1a1a; }
+.inv-classic .c-bank { vertical-align: top !important; font-size: 11.5px; }
+.inv-classic .c-note { font-size: 11px; margin-top: 12px; }
 .empty { color: var(--muted); padding: 20px; text-align: center; }
 
 @media print {
@@ -70,7 +152,10 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   main { padding: 0; max-width: none; }
   .tab { display: none !important; }
   #tab-invoice { display: block !important; }
-  .invoice { border: none; margin: 0; padding: 0; }
+  .invoice-wrap { border: none; margin: 0; overflow: visible; }
+  .invoice { min-height: 0; padding: 0; width: auto; }
+  .inv-modern .b-band { margin: 0 0 0; padding: 22px 24px 16px; }
+  .invoice, .invoice * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .invoice tr { page-break-inside: avoid; }
 }
 
