@@ -4,7 +4,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif; background: var(--bg); color: var(--text); font-size: 16px; }
-header { background: #24292f; color: #fff; padding: 10px 16px; position: sticky; top: 0; z-index: 5; }
+header { background: #24292f; color: #fff; padding: 10px 16px; position: sticky; top: 0; z-index: 5; padding-top: max(10px, env(safe-area-inset-top)); }
 header h1 { margin: 0 0 8px; font-size: 18px; }
 nav { display: flex; gap: 6px; flex-wrap: wrap; }
 nav button { background: transparent; color: #fff; border: 1px solid #57606a; padding: 6px 12px; border-radius: 6px; font-size: 15px; }
