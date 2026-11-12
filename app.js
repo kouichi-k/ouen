@@ -455,18 +455,45 @@ async function makeSealImage(file) {
   const g = cv.getContext('2d'); g.drawImage(img, 0, 0, w, h);
   URL.revokeObjectURL(img.src);
   const px = g.getImageData(0, 0, w, h); const a = px.data;
-  // 紙の明るさを推定（明るい方から5%の値）して、それより暗い所を印とみなす
-  const lum = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) lum[i] = (a[i * 4] * 0.3 + a[i * 4 + 1] * 0.59 + a[i * 4 + 2] * 0.11) | 0;
-  const sorted = Array.from(lum).sort((x, y) => x - y);
-  const paper = Math.max(150, sorted[Math.floor(sorted.length * 0.95)]);
-  const ink = Math.min(paper - 60, sorted[Math.floor(sorted.length * 0.02)] + 20);
-  let minX = w, minY = h, maxX = -1, maxY = -1;
-  for (let i = 0; i < w * h; i++) {
-    const t = Math.min(1, Math.max(0, (paper - 12 - lum[i]) / Math.max(20, paper - 12 - ink)));
-    const alpha = Math.round(t * (a[i * 4 + 3] / 255) * 255);
+  const n = w * h;
+  // 赤み（R が G・B よりどれだけ強いか）で印を探す。影や紙の色むらに強い
+  const red = new Int16Array(n);
+  for (let i = 0; i < n; i++) red[i] = a[i * 4] - (a[i * 4 + 1] + a[i * 4 + 2]) / 2;
+  const redCount = red.reduce((k, v) => k + (v > 60 ? 1 : 0), 0);
+  let strength;
+  if (redCount > n * 0.002) {
+    const peak = Array.from(red).sort((x, y) => x - y)[Math.floor(n * 0.998)];
+    const lo = 28, hi = Math.max(lo + 30, peak * 0.65);
+    strength = (i) => (red[i] - lo) / (hi - lo);
+  } else {
+    // 赤くない印（黒・青など）：周りの明るさとの差で判定（影があっても大丈夫なように場所ごとに比べる）
+    const small = document.createElement('canvas'); small.width = 24; small.height = 24;
+    small.getContext('2d').drawImage(cv, 0, 0, 24, 24);
+    const big = document.createElement('canvas'); big.width = w; big.height = h;
+    const bg2 = big.getContext('2d'); bg2.imageSmoothingEnabled = true; bg2.filter = 'blur(8px)'; bg2.drawImage(small, 0, 0, w, h);
+    const bgd = bg2.getImageData(0, 0, w, h).data;
+    strength = (i) => {
+      const l = a[i * 4] * 0.3 + a[i * 4 + 1] * 0.59 + a[i * 4 + 2] * 0.11;
+      const bl = bgd[i * 4] * 0.3 + bgd[i * 4 + 1] * 0.59 + bgd[i * 4 + 2] * 0.11;
+      return (bl - l - 25) / 60;
+    };
+  }
+  const rowCnt = new Uint32Array(h), colCnt = new Uint32Array(w);
+  for (let i = 0; i < n; i++) {
+    const t = Math.min(1, Math.max(0, strength(i)));
+    // 濃さを段階的にそろえて、画像を小さく保存できるようにする
+    let alpha = Math.round(t * (a[i * 4 + 3] / 255) * 8) * 32; if (alpha > 255) alpha = 255;
     a[i * 4] = 205; a[i * 4 + 1] = 32; a[i * 4 + 2] = 38; a[i * 4 + 3] = alpha;
-    if (alpha > 40) { const x = i % w, y = (i / w) | 0; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    if (alpha > 90) { rowCnt[(i / w) | 0]++; colCnt[i % w]++; }
+  }
+  // ゴミ（点）を無視して、印のある範囲を求める
+  const minHit = Math.max(2, Math.round(Math.min(w, h) * 0.004));
+  let minX = colCnt.findIndex((v) => v >= minHit), maxX = w - 1 - Array.from(colCnt).reverse().findIndex((v) => v >= minHit);
+  let minY = rowCnt.findIndex((v) => v >= minHit), maxY = h - 1 - Array.from(rowCnt).reverse().findIndex((v) => v >= minHit);
+  if (minX < 0 || minY < 0) maxX = -1;
+  if (maxX >= 0) {
+    // 範囲の外は完全に透明にする
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < minX || x > maxX || y < minY || y > maxY) a[(y * w + x) * 4 + 3] = 0;
   }
   if (maxX < 0) throw new Error('印が見つかりませんでした。白い紙に押した印を明るい場所で撮ってください');
   g.putImageData(px, 0, 0);
@@ -476,6 +503,9 @@ async function makeSealImage(file) {
     const out = document.createElement('canvas'); out.width = out.height = size;
     const k = (size * 0.96) / side;
     out.getContext('2d').drawImage(cv, minX, minY, bw, bh, (size - bw * k) / 2, (size - bh * k) / 2, bw * k, bh * k);
+    const og = out.getContext('2d'); const od = og.getImageData(0, 0, size, size);
+    for (let i = 3; i < od.data.length; i += 4) { const v = od.data[i]; od.data[i] = v < 40 ? 0 : Math.min(255, Math.round(v / 64) * 64); }
+    og.putImageData(od, 0, 0);
     const url = out.toDataURL('image/png');
     if (url.length < 45000) return url;
   }
